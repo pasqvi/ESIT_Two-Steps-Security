@@ -1,0 +1,400 @@
+[
+    {
+        "id": "a1ae0cf22b8f54a0",
+        "type": "tab",
+        "label": "ESIT Lock + AWS Shadow + Telegram",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "2bf3ea6138bab75e",
+        "type": "inject",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "On start -> Shadow /get",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.5,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 200,
+        "y": 120,
+        "wires": [
+            [
+                "c025f471eb01c432"
+            ]
+        ]
+    },
+    {
+        "id": "c025f471eb01c432",
+        "type": "function",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Build GET payload {}",
+        "func": "msg.payload = {};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 120,
+        "wires": [
+            [
+                "c2a07636154b364c"
+            ]
+        ]
+    },
+    {
+        "id": "c2a07636154b364c",
+        "type": "mqtt out",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "AWS Shadow GET",
+        "topic": "$aws/things/esit-obj1/shadow/get",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "dce9fd25d42782af",
+        "x": 700,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "a1bc2592c1dfab62",
+        "type": "mqtt in",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "AWS /get/accepted",
+        "topic": "$aws/things/esit-obj1/shadow/get/accepted",
+        "qos": "0",
+        "datatype": "auto",
+        "broker": "dce9fd25d42782af",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 170,
+        "y": 220,
+        "wires": [
+            [
+                "f1c61de06d67fad9"
+            ]
+        ]
+    },
+    {
+        "id": "abe1a3f988740661",
+        "type": "mqtt in",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "AWS /update/documents",
+        "topic": "$aws/things/esit-obj1/shadow/update/documents",
+        "qos": "0",
+        "datatype": "auto",
+        "broker": "dce9fd25d42782af",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 190,
+        "y": 280,
+        "wires": [
+            [
+                "f1c61de06d67fad9"
+            ]
+        ]
+    },
+    {
+        "id": "f1c61de06d67fad9",
+        "type": "function",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Parse Shadow + cache lock + detect request",
+        "func": "let p = msg.payload;\nif (typeof p === 'string') {\n  try { p = JSON.parse(p); } catch(e) { return null; }\n}\n\nlet state = null;\nif (p && p.current && p.current.state) state = p.current.state;\nelse if (p && p.state) state = p.state;\nif (!state) return null;\n\nlet reported = state.reported || {};\nlet desired  = state.desired  || {};\n\nlet lock = (reported.lock || desired.lock || 'chiusa').toString();\nflow.set('lock', lock);\n\n// Forza stato iniziale = chiusa (solo la PRIMA volta)\nif (!flow.get('initialized')) {\n  flow.set('initialized', true);\n  return [ null, { lockTarget: 'chiusa', reason: 'init' } ];\n}\n\n// Detect nuova request inviata dall'ESP (reported.request)\nlet req = reported.request;\nif (req && req.nonce) {\n  if (req.nonce !== flow.get('lastReqNonce')) {\n    flow.set('lastReqNonce', req.nonce);\n    return [ { payload: req }, null ];\n  }\n}\n\nreturn null;",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 250,
+        "wires": [
+            [
+                "4cc6f4e01b1a9626"
+            ],
+            [
+                "2089c7f6aef80dd9"
+            ]
+        ]
+    },
+    {
+        "id": "4cc6f4e01b1a9626",
+        "type": "function",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Process request (0000 + OK)",
+        "func": "const CODE_OK = '0000';\nconst chatId = Number(env.get('chatid'));\n\nlet req = msg.payload || {};\nlet code  = (req.code  || '').toString();\nlet nonce = (req.nonce || '').toString();\n\nif (!nonce) return null;\n\n// Se c'è già una pending request, non sovrascrivere\nlet pending = flow.get('pending');\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Richiesta già in corso: premi CONFERMA entro 10 secondi.'\n      }\n    },\n    null,\n    null\n  ];\n}\n\nif (code !== CODE_OK) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice errato.'\n      }\n    },\n    null,\n    null\n  ];\n}\n\nlet lock = (flow.get('lock') || 'chiusa').toString();\n\n// Se è CHIUSA -> serve conferma Telegram entro 10s\nif (lock === 'chiusa') {\n  let expires = Date.now() + 10000;\n  flow.set('pending', { nonce, expires });\n\n  // reset eventuale timer precedente\n  let oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  // timer scadenza 10s\n  let t = setTimeout(() => {\n    let p = flow.get('pending');\n    if (p && p.nonce === nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      flow.set('pendingTimer', null);\n      node.send([\n        {\n          payload: {\n            chatId,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        null\n      ]);\n    }\n  }, 10000);\n  flow.set('pendingTimer', t);\n\n  // Inline button con callback query (NO HTTP)\n  // IMPORTANTISSIMO: reply_markup deve essere una stringa JSON\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [ { text: 'CONFERMA', callback_data: 'CONFIRM|' + nonce } ]\n            ]\n          })\n        }\n      }\n    },\n    null,\n    null\n  ];\n}\n\n// Se è APERTA -> chiudi subito (senza Telegram)\nreturn [\n  {\n    payload: {\n      chatId,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close' },\n  null\n];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 840,
+        "y": 220,
+        "wires": [
+            [
+                "f835c07f31250a4d"
+            ],
+            [
+                "2089c7f6aef80dd9"
+            ],
+            [
+                "373c94d16d9f46a8"
+            ]
+        ]
+    },
+    {
+        "id": "2089c7f6aef80dd9",
+        "type": "function",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Build Shadow UPDATE (desired+reported lock + cleanup)",
+        "func": "let lockTarget = (msg.lockTarget || 'chiusa').toString();\n\nmsg.payload = {\n  state: {\n    desired: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget\n    },\n    reported: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget,\n\n      // pulizia campi inutili (rimozione con null)\n      value: null,\n      pending: null,\n      reqid: null,\n      req_ts: null,\n      op: null,\n      op_ts: null,\n      action: null,\n      request: null\n    }\n  }\n};\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 840,
+        "y": 320,
+        "wires": [
+            [
+                "0023e9af03e61d33",
+                "8845dbc7e241fe11"
+            ]
+        ]
+    },
+    {
+        "id": "0023e9af03e61d33",
+        "type": "mqtt out",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "AWS Shadow UPDATE",
+        "topic": "$aws/things/esit-obj1/shadow/update",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "dce9fd25d42782af",
+        "x": 1120,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "46de62fb3a596395",
+        "type": "telegram event",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Telegram Event (callback_query)",
+        "bot": "00af2f8b6f9b79d7",
+        "event": "callback_query",
+        "autoanswer": true,
+        "x": 190,
+        "y": 420,
+        "wires": [
+            [
+                "ffcce355d037ecd6"
+            ]
+        ]
+    },
+    {
+        "id": "ffcce355d037ecd6",
+        "type": "function",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Handle callback CONFIRM|nonce (<=10s)",
+        "func": "const chatId = Number(env.get('chatid'));\nlet pending = flow.get('pending');\n\n// Con telegram event (callback_query) normalmente:\n// msg.payload.type = 'callback_query'\n// msg.payload.content = callback_data (string)\nlet data = (msg.payload && msg.payload.content) ? msg.payload.content : null;\n\n// fallback extra robusto\nif (data && typeof data === 'object') {\n  data = data.data || data.content || null;\n}\nif (!data && msg.originalMessage && msg.originalMessage.callback_query && msg.originalMessage.callback_query.data) {\n  data = msg.originalMessage.callback_query.data;\n}\n\nif (!data || typeof data !== 'string') return null;\nif (!data.startsWith('CONFIRM|')) return null;\n\nlet nonce = data.split('|')[1] || '';\n\nif (!pending || !pending.nonce) {\n  return [ null, { payload: { chatId, type: 'message', content: 'Nessuna richiesta in corso.' } } ];\n}\n\nif (nonce !== pending.nonce) {\n  return [ null, { payload: { chatId, type: 'message', content: 'Conferma non valida (nonce mismatch).' } } ];\n}\n\nif (Date.now() > pending.expires) {\n  flow.set('pending', null);\n  let t = flow.get('pendingTimer');\n  if (t) clearTimeout(t);\n  flow.set('pendingTimer', null);\n\n  return [ null, { payload: { chatId, type: 'message', content: 'Tempo scaduto: serratura NON aperta.' } } ];\n}\n\n// OK: apri e aggiorna shadow\nflow.set('pending', null);\nlet t = flow.get('pendingTimer');\nif (t) clearTimeout(t);\nflow.set('pendingTimer', null);\n\nreturn [\n  { lockTarget: 'aperta', reason: 'open' },\n  { payload: { chatId, type: 'message', content: 'Conferma ricevuta: serratura APERTA.' } }\n];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 540,
+        "y": 420,
+        "wires": [
+            [
+                "2089c7f6aef80dd9"
+            ],
+            [
+                "f835c07f31250a4d"
+            ]
+        ]
+    },
+    {
+        "id": "f835c07f31250a4d",
+        "type": "telegram sender",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "Telegram Sender",
+        "bot": "00af2f8b6f9b79d7",
+        "haserroroutput": true,
+        "outputs": 2,
+        "x": 1120,
+        "y": 220,
+        "wires": [
+            [
+                "45e799f25f879e32"
+            ],
+            [
+                "fba40dbc96cecaff"
+            ]
+        ]
+    },
+    {
+        "id": "373c94d16d9f46a8",
+        "type": "debug",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "DEBUG req/other",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "x": 1140,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "8845dbc7e241fe11",
+        "type": "debug",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "DEBUG AWS update out",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 1140,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "45e799f25f879e32",
+        "type": "debug",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "DEBUG Telegram ok",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 1330,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "fba40dbc96cecaff",
+        "type": "debug",
+        "z": "a1ae0cf22b8f54a0",
+        "name": "DEBUG Telegram errors",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 1340,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "dce9fd25d42782af",
+        "type": "mqtt-broker",
+        "name": "AWS_IOT",
+        "broker": "a3pgxyrscdd3yp-ats.iot.eu-north-1.amazonaws.com",
+        "port": "8883",
+        "tls": "4045e33e7770beeb",
+        "clientid": "asset1",
+        "autoConnect": true,
+        "usetls": true,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": false,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "00af2f8b6f9b79d7",
+        "type": "telegram bot",
+        "botname": "g1_esit_bot",
+        "usernames": "",
+        "chatids": "${chatid}",
+        "baseapiurl": "",
+        "testenvironment": false,
+        "updatemode": "polling",
+        "pollinterval": 300,
+        "usesocks": false,
+        "sockshost": "",
+        "socksprotocol": "socks5",
+        "socksport": 6667,
+        "socksusername": "anonymous",
+        "sockspassword": "",
+        "bothost": "",
+        "botpath": "",
+        "localbothost": "0.0.0.0",
+        "localbotport": 8443,
+        "publicbotport": 8443,
+        "privatekey": "",
+        "certificate": "",
+        "useselfsignedcertificate": false,
+        "sslterminated": false,
+        "verboselogging": false
+    },
+    {
+        "id": "4045e33e7770beeb",
+        "type": "tls-config",
+        "name": "asset1certs",
+        "cert": "",
+        "key": "",
+        "ca": "",
+        "certname": "777750a8329b2a2057cb43d1b7822e120ad06274e69fe2448bff14740057f9e6-certificate.pem.crt",
+        "keyname": "777750a8329b2a2057cb43d1b7822e120ad06274e69fe2448bff14740057f9e6-private.pem.key",
+        "caname": "root-CA.crt",
+        "servername": "",
+        "verifyservercert": false,
+        "alpnprotocol": ""
+    },
+    {
+        "id": "8583a24247724c5b",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-telegrambot": "17.0.3"
+        }
+    }
+]
