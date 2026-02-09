@@ -18,9 +18,7 @@
 
 // -------------------- PIN --------------------
 #define IR_PIN   D5
-
-// D1 è SCL (I2C) -> NON usarlo come LOCK_PIN
-#define LOCK_PIN D6
+#define LOCK_PIN D6   // D1 è SCL I2C, quindi NON usarlo come LOCK_PIN
 
 // LCD I2C
 #define I2C_SDA_PIN D2
@@ -50,7 +48,6 @@ BearSSL::X509List cert(cacert);
 BearSSL::X509List client_crt(client_cert);
 BearSSL::PrivateKey key(privkey);
 
-// Buffer MQTT aumentato (serve per stabilità)
 MQTTClient client(4096);
 
 // -------------------- IR --------------------
@@ -59,9 +56,8 @@ decode_results results;
 
 String codeBuffer = "";
 
-// -------------------- STATO SERRATURA (variabile booleana “vera” per display) --------------------
+// -------------------- STATO SERRATURA (VERITÀ PER LCD) --------------------
 bool serratura_aperta = false;   // false=chiusa, true=aperta
-String lockState = "chiusa";     // solo per log/compatibilità
 
 // -------------------- TIME --------------------
 time_t now;
@@ -84,9 +80,34 @@ bool countdownActive = false;
 uint32_t countdownEndMs = 0;
 int lastCountdownShown = -1;
 
-// (sync Shadow periodico, opzionale ma utile come fallback)
+// Shadow GET periodico (fallback/debug)
 uint32_t lastShadowGetMs = 0;
 const uint32_t SHADOW_GET_PERIOD_MS = 20000;
+
+// -------------------- TEST TIMING (BASATO SU serratura_aperta) --------------------
+// TestAutenticazioneCompleta: da pressione OK (codice corretto, serratura chiusa) -> serratura_aperta==true
+bool testAuthRunning = false;
+uint32_t testAuthStartMs = 0;
+
+// TestChiusuraSerratura: da pressione OK (codice corretto, serratura aperta) -> serratura_aperta==false
+bool testCloseRunning = false;
+uint32_t testCloseStartMs = 0;
+
+// timeout di sicurezza
+const uint32_t TEST_AUTH_TIMEOUT_MS  = 30000;
+const uint32_t TEST_CLOSE_TIMEOUT_MS = 30000;
+
+void printTestTime(const char* name, uint32_t elapsedMs, const char* suffix = nullptr) {
+  Serial.print(name);
+  Serial.print(": ");
+  Serial.print(elapsedMs);
+  Serial.print(" ms");
+  if (suffix && suffix[0]) {
+    Serial.print(" ");
+    Serial.print(suffix);
+  }
+  Serial.println();
+}
 
 // -------------------- UTILS LCD --------------------
 static String pad16(const String& s) {
@@ -147,12 +168,11 @@ char decodeKeyFromIR(uint16_t command) {
   }
 }
 
-// -------------------- LOCK APPLY --------------------
+// -------------------- APPLY LOCK (solo aggiorna variabile globale + HW) --------------------
 void applyLockBool(bool open) {
   serratura_aperta = open;
-  lockState = open ? "aperta" : "chiusa";
 
-  // Se arriva APERTA: stop countdown/timeout
+  // stop countdown se arriva apertura vera
   if (serratura_aperta) {
     countdownActive = false;
     bannerTimeout = false;
@@ -160,28 +180,20 @@ void applyLockBool(bool open) {
 
   digitalWrite(LOCK_PIN, serratura_aperta ? HIGH : LOW);
 
-  Serial.print("LOCK (from backend) -> ");
-  Serial.println(lockState);
+  Serial.print("LOCK_STATE (custom) -> ");
+  Serial.println(serratura_aperta ? "aperta" : "chiusa");
 }
 
-// Parser minimale per payload custom: accetta "aperta"/"chiusa" o JSON contenente quei valori
+// Parser minimale: accetta "aperta"/"chiusa" o JSON contenente quei token
 void parseCustomLockPayload(const String& p) {
   String s = p;
   s.trim();
   s.toLowerCase();
 
-  // se è JSON, basta cercare token
-  if (s.indexOf("aperta") >= 0) {
-    applyLockBool(true);
-    return;
-  }
-  if (s.indexOf("chiusa") >= 0) {
-    applyLockBool(false);
-    return;
-  }
+  if (s.indexOf("aperta") >= 0) { applyLockBool(true); return; }
+  if (s.indexOf("chiusa") >= 0) { applyLockBool(false); return; }
 
-  // ignora se non riconosciuto
-  Serial.print("Custom lock payload not recognized: ");
+  Serial.print("Custom lock payload NOT recognized: ");
   Serial.println(p);
 }
 
@@ -266,27 +278,21 @@ bool connectToWiFi(const String& init_str, uint32_t windowMs = 20000, uint8_t ma
 }
 
 void messageReceived(String &topic, String &payload) {
-  // 1) Topic custom: questa è la “verità” che useremo per il display
   if (topic == TOPIC_LOCK_STATE) {
-    Serial.print("RX custom state: ");
+    Serial.print("RX custom lock_state: ");
     Serial.println(payload);
     parseCustomLockPayload(payload);
     return;
   }
 
-  // 2) Fallback: shadow get/accepted o update/accepted (se vuoi mantenere un minimo di sync)
-  if (topic != TOPIC_GET_ACCEPTED && topic != TOPIC_UPDATE_ACCEPTED) return;
-
-  // Parser leggero: cerca prima "aperta"/"chiusa"
-  String s = payload;
-  s.toLowerCase();
-  if (s.indexOf("aperta") >= 0 && s.indexOf("\"lock\"") >= 0) {
-    applyLockBool(true);
-    return;
-  }
-  if (s.indexOf("chiusa") >= 0 && s.indexOf("\"lock\"") >= 0) {
-    applyLockBool(false);
-    return;
+  // fallback shadow (non usato per LCD/timing, ma lo lascio)
+  if (topic == TOPIC_GET_ACCEPTED || topic == TOPIC_UPDATE_ACCEPTED) {
+    String s = payload;
+    s.toLowerCase();
+    if (s.indexOf("\"lock\"") >= 0) {
+      if (s.indexOf("aperta") >= 0) applyLockBool(true);
+      else if (s.indexOf("chiusa") >= 0) applyLockBool(false);
+    }
   }
 }
 
@@ -301,7 +307,7 @@ bool connectToMqtt(bool nonBlocking = false, uint8_t maxRetries = 10) {
       client.subscribe(TOPIC_GET_ACCEPTED);
       client.subscribe(TOPIC_UPDATE_ACCEPTED);
 
-      // IMPORTANTISSIMO: subscribe al topic custom
+      // fondamentale
       client.subscribe(TOPIC_LOCK_STATE);
 
       client.publish(TOPIC_GET, "{}", false, 0);
@@ -360,7 +366,7 @@ void sendIRCodeRequest(const String& code) {
 
   req["src"]   = "ir";
   req["thing"] = THINGNAME;
-  req["fw"]    = "esit-esp8266-1.4-customstate";
+  req["fw"]    = "esit-esp8266-1.6-timing";
 
   String out;
   serializeJson(doc, out);
@@ -378,13 +384,11 @@ void sendIRCodeRequest(const String& code) {
 void updateLCDUi() {
   uint32_t ms = millis();
 
-  // 1) Priorità assoluta: se backend dice APERTA, mostra APERTA (stop countdown già fatto)
   if (serratura_aperta) {
     lcdWrite2("SERRATURA", "APERTA");
     return;
   }
 
-  // 2) Banner CODICE ERRATO
   if (bannerWrong && ms < bannerWrongUntilMs) {
     lcdWrite2("CODICE ERRATO", "");
     return;
@@ -392,7 +396,6 @@ void updateLCDUi() {
     bannerWrong = false;
   }
 
-  // 3) Banner TEMPO SCADUTO
   if (bannerTimeout && ms < bannerTimeoutUntilMs) {
     lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
     return;
@@ -400,19 +403,26 @@ void updateLCDUi() {
     bannerTimeout = false;
   }
 
-  // 4) Countdown (solo se è ancora chiusa)
   if (countdownActive) {
     if (ms >= countdownEndMs) {
       countdownActive = false;
 
-      // se nel frattempo non è arrivato APERTA dal backend -> timeout
-      if (!serratura_aperta) startTimeoutBanner();
+      // se non è arrivata apertura -> timeout (e chiudo test autenticazione stampando tempo)
+      if (!serratura_aperta) {
+        startTimeoutBanner();
+        if (testAuthRunning) {
+          uint32_t elapsed = (uint32_t)(millis() - testAuthStartMs);
+          printTestTime("TestAutenticazioneCompleta", elapsed, "(TIMEOUT)");
+          testAuthRunning = false;
+        }
+      }
+
       lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
       return;
     }
 
     uint32_t remMs = countdownEndMs - ms;
-    int remS = (int)((remMs + 999) / 1000); // ceil
+    int remS = (int)((remMs + 999) / 1000);
     if (remS < 0) remS = 0;
     if (remS > 10) remS = 10;
 
@@ -423,7 +433,6 @@ void updateLCDUi() {
     return;
   }
 
-  // 5) Stato normale CHIUSA
   lcdWrite2("SERRATURA", "CHIUSA");
 }
 
@@ -435,7 +444,6 @@ void setup() {
   pinMode(LOCK_PIN, OUTPUT);
   digitalWrite(LOCK_PIN, LOW);
 
-  // LCD init
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   lcd.begin();   // se la tua libreria richiede lcd.init(), sostituisci qui
   lcd.backlight();
@@ -474,13 +482,37 @@ void loop() {
     client.loop();
   }
 
-  // Fallback sync shadow periodico (non serve per display se custom state funziona, ma aiuta debug)
+  // Shadow GET periodico (fallback/debug)
   if (client.connected()) {
     uint32_t ms = millis();
     if (ms - lastShadowGetMs >= SHADOW_GET_PERIOD_MS) {
       client.publish(TOPIC_GET, "{}", false, 0);
       lastShadowGetMs = ms;
     }
+  }
+
+  // ---- COMPLETAMENTO TEST BASATO SU VARIABILE GLOBALE ----
+  if (testAuthRunning && serratura_aperta) {
+    uint32_t elapsed = (uint32_t)(millis() - testAuthStartMs);
+    printTestTime("TestAutenticazioneCompleta", elapsed);
+    testAuthRunning = false;
+  }
+  if (testCloseRunning && !serratura_aperta) {
+    uint32_t elapsed = (uint32_t)(millis() - testCloseStartMs);
+    printTestTime("TestChiusuraSerratura", elapsed);
+    testCloseRunning = false;
+  }
+
+  // timeout di sicurezza
+  if (testAuthRunning && (uint32_t)(millis() - testAuthStartMs) > TEST_AUTH_TIMEOUT_MS) {
+    uint32_t elapsed = (uint32_t)(millis() - testAuthStartMs);
+    printTestTime("TestAutenticazioneCompleta", elapsed, "(TIMEOUT)");
+    testAuthRunning = false;
+  }
+  if (testCloseRunning && (uint32_t)(millis() - testCloseStartMs) > TEST_CLOSE_TIMEOUT_MS) {
+    uint32_t elapsed = (uint32_t)(millis() - testCloseStartMs);
+    printTestTime("TestChiusuraSerratura", elapsed, "(TIMEOUT)");
+    testCloseRunning = false;
   }
 
   // IR input
@@ -504,17 +536,25 @@ void loop() {
           Serial.print("OK pressed, sending code: ");
           Serial.println(entered);
 
-          // UI locale: codice errato / countdown
           if (entered != String(CODE_OK)) {
             startWrongBanner();
           } else {
-            // countdown SOLO se (secondo backend/variabile) è chiusa
+            // Se CHIUSA: avvia TestAutenticazioneCompleta + countdown
             if (!serratura_aperta) {
+              testAuthRunning = true;
+              testAuthStartMs = millis();
+              Serial.println("TestAutenticazioneCompleta: START");
               startCountdown10s();
+            }
+            // Se APERTA: avvia TestChiusuraSerratura (no countdown)
+            else {
+              testCloseRunning = true;
+              testCloseStartMs = millis();
+              Serial.println("TestChiusuraSerratura: START");
             }
           }
 
-          // manda la request al backend
+          // manda request al backend
           sendIRCodeRequest(entered);
         }
       }
