@@ -1,15 +1,15 @@
 [
     {
-        "id": "90b6e48de7eca51a",
+        "id": "7eaa885a5b382d28",
         "type": "tab",
         "label": "ESIT Lock + AWS Shadow + Telegram",
         "disabled": false,
         "info": ""
     },
     {
-        "id": "e6b49998c391f672",
+        "id": "0e30ebbb05d2920d",
         "type": "inject",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "On start -> Shadow /get",
         "props": [
             {
@@ -31,14 +31,14 @@
         "y": 60,
         "wires": [
             [
-                "81e9c2b8e7f155ca"
+                "bf66f1e2f65e7069"
             ]
         ]
     },
     {
-        "id": "81e9c2b8e7f155ca",
+        "id": "bf66f1e2f65e7069",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Build GET payload {}",
         "func": "msg.payload = {};\nreturn msg;",
         "outputs": 1,
@@ -50,14 +50,14 @@
         "y": 60,
         "wires": [
             [
-                "eafd68c0b6d2f8f0"
+                "efaff7c5dfb9db8a"
             ]
         ]
     },
     {
-        "id": "eafd68c0b6d2f8f0",
+        "id": "efaff7c5dfb9db8a",
         "type": "mqtt out",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "AWS Shadow GET",
         "topic": "$aws/things/esit-obj1/shadow/get",
         "qos": "0",
@@ -73,9 +73,9 @@
         "wires": []
     },
     {
-        "id": "98cc5ca97948d0b6",
+        "id": "87eb9b9062dba32c",
         "type": "mqtt in",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "AWS /get/accepted",
         "topic": "$aws/things/esit-obj1/shadow/get/accepted",
         "qos": "0",
@@ -89,14 +89,14 @@
         "y": 140,
         "wires": [
             [
-                "c7c43ababba2e2d4"
+                "543f3a399bfe6a94"
             ]
         ]
     },
     {
-        "id": "f1602286e4aa2676",
+        "id": "6040578211df75de",
         "type": "mqtt in",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "AWS /update/documents",
         "topic": "$aws/things/esit-obj1/shadow/update/documents",
         "qos": "0",
@@ -110,14 +110,14 @@
         "y": 260,
         "wires": [
             [
-                "c7c43ababba2e2d4"
+                "543f3a399bfe6a94"
             ]
         ]
     },
     {
-        "id": "c7c43ababba2e2d4",
+        "id": "543f3a399bfe6a94",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Parse Shadow + cache lock + detect requests",
         "func": "let p = msg.payload;\nif (typeof p === 'string') {\n  try { p = JSON.parse(p); } catch(e) { return null; }\n}\n\nlet state = null;\nif (p && p.current && p.current.state) state = p.current.state;\nelse if (p && p.state) state = p.state;\nif (!state) return null;\n\nlet reported = state.reported || {};\nlet desired  = state.desired  || {};\n\nlet lock = (reported.lock || desired.lock || 'chiusa').toString();\nflow.set('lock', lock);\n\n// Forza stato iniziale = chiusa (solo la PRIMA volta)\nif (!flow.get('initialized')) {\n  flow.set('initialized', true);\n  return [ null, { lockTarget: 'chiusa', reason: 'init' } ];\n}\n\n// Detect nuova request inviata dall'ESP (reported.request)\nlet req = reported.request;\nif (req && req.nonce) {\n  if (req.nonce !== flow.get('lastReqNonce')) {\n    flow.set('lastReqNonce', req.nonce);\n    return [ { payload: req }, null ];\n  }\n}\n\nreturn null;",
         "outputs": 2,
@@ -130,19 +130,19 @@
         "y": 200,
         "wires": [
             [
-                "d9339d91881a48c6"
+                "76c88075184daf85"
             ],
             [
-                "cf164636569e870a"
+                "211ec6828a47ae75"
             ]
         ]
     },
     {
-        "id": "d9339d91881a48c6",
+        "id": "76c88075184daf85",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Process request (0000 + OK)",
-        "func": "const CODE_OK = '0000';\nconst chatId = Number(env.get('chatid'));\n\nlet req = msg.payload || {};\nlet code  = (req.code  || '').toString();\nlet nonce = (req.nonce || '').toString();\nlet ts    = Number(req.ts || 0);\nif (!ts || Number.isNaN(ts)) ts = Math.floor(Date.now() / 1000);\n\nif (!nonce) return null;\n\nlet lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction nowIT() {\n  try { return new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }); }\n  catch (e) { return new Date().toLocaleString('it-IT'); }\n}\n\nfunction cleanupShadowNoChange(extra) {\n  const out = { lockTarget: lock, reason: 'cleanup' };\n  if (extra && Object.prototype.hasOwnProperty.call(extra, 'last_error')) {\n    out.last_error = extra.last_error;\n  }\n  return out;\n}\n\n// Se c'è già una pending request, non sovrascrivere\nlet pending = flow.get('pending');\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Richiesta già in corso: premi CONFERMA entro 10 secondi.'\n      }\n    },\n    cleanupShadowNoChange({ last_error: null }),\n    null\n  ];\n}\n\n// CODICE ERRATO: Telegram + scrivi last_error + cleanup request\nif (code !== CODE_OK) {\n  const when = nowIT();\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: `🚫 Codice errato: accesso negato.\\nOra: ${when}`\n      }\n    },\n    cleanupShadowNoChange({\n      last_error: { type: 'wrong_code', msg: 'Codice errato', nonce, ts }\n    }),\n    null\n  ];\n}\n\n// CODICE CORRETTO\n\n// Se è CHIUSA -> serve conferma Telegram entro 10s\nif (lock === 'chiusa') {\n  let expires = Date.now() + 10000;\n  flow.set('pending', { nonce, expires });\n\n  let oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  let t = setTimeout(() => {\n    let p = flow.get('pending');\n    if (p && p.nonce === nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      flow.set('pendingTimer', null);\n      node.send([\n        {\n          payload: {\n            chatId,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        null\n      ]);\n    }\n  }, 10000);\n  flow.set('pendingTimer', t);\n\n  // Pulisco request e cancello eventuali errori precedenti\n  const cleanupMsg = cleanupShadowNoChange({ last_error: null });\n\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [ { text: 'CONFERMA', callback_data: 'CONFIRM|' + nonce } ]\n            ]\n          })\n        }\n      }\n    },\n    cleanupMsg,\n    null\n  ];\n}\n\n// Se è APERTA -> chiudi subito (senza Telegram)\nreturn [\n  {\n    payload: {\n      chatId,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  null\n];",
+        "func": "const CODE_OK = '0000';\nconst chatId = Number(env.get('chatid'));\n\nlet req = msg.payload || {};\nlet code  = (req.code  || '').toString();\nlet nonce = (req.nonce || '').toString();\nlet ts    = Number(req.ts || 0);\nif (!ts || Number.isNaN(ts)) ts = Math.floor(Date.now() / 1000);\n\nif (!nonce) return null;\n\nlet lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction nowIT() {\n  try { return new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }); }\n  catch (e) { return new Date().toLocaleString('it-IT'); }\n}\n\nfunction cleanupShadowNoChange(extra) {\n  const out = { lockTarget: lock, reason: 'cleanup' };\n  if (extra && Object.prototype.hasOwnProperty.call(extra, 'last_error')) {\n    out.last_error = extra.last_error;\n  }\n  return out;\n}\n\n// Se c'è già una pending request, non sovrascrivere\nlet pending = flow.get('pending');\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Richiesta già in corso: premi CONFERMA entro 10 secondi.'\n      }\n    },\n    cleanupShadowNoChange({ last_error: null }),\n    null\n  ];\n}\n\n// CODICE ERRATO: Telegram + scrivi last_error + cleanup request\nif (code !== CODE_OK) {\n  const when = nowIT();\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: `🚫 Codice errato: accesso negato.\\nOra: ${when}`\n      }\n    },\n    cleanupShadowNoChange({\n      last_error: { type: 'wrong_code', msg: 'Codice errato', nonce, ts }\n    }),\n    null\n  ];\n}\n\n// CODICE CORRETTO\n\n// Se è CHIUSA -> serve conferma Telegram entro 10s\nif (lock === 'chiusa') {\n  let expires = Date.now() + 10000;\n  flow.set('pending', { nonce, expires });\n\n  let oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  let t = setTimeout(() => {\n    let p = flow.get('pending');\n    if (p && p.nonce === nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      flow.set('pendingTimer', null);\n      node.send([\n        {\n          payload: {\n            chatId,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        null\n      ]);\n    }\n  }, 10000);\n  flow.set('pendingTimer', t);\n\n  // Pulisco request e cancello eventuali errori precedenti\n  const cleanupMsg = cleanupShadowNoChange({ last_error: null });\n\n  return [\n    {\n      // PASSO IL NONCE ANCHE NEL MSG per metriche\n      _nonce: nonce,\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [ { text: 'CONFERMA', callback_data: 'CONFIRM|' + nonce } ]\n            ]\n          })\n        }\n      }\n    },\n    cleanupMsg,\n    null\n  ];\n}\n\n// Se è APERTA -> chiudi subito (senza Telegram)\nreturn [\n  {\n    payload: {\n      chatId,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  null\n];",
         "outputs": 3,
         "timeout": "",
         "noerr": 0,
@@ -153,20 +153,39 @@
         "y": 200,
         "wires": [
             [
-                "fd2ca4bbe4351fea"
+                "9e3ba605c105ed5b"
             ],
             [
-                "cf164636569e870a"
+                "211ec6828a47ae75"
             ],
             [
-                "3821548efe6d0667"
+                "942ebd2870eb74b8"
             ]
         ]
     },
     {
-        "id": "cf164636569e870a",
+        "id": "9e3ba605c105ed5b",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
+        "name": "MARK t0 (Telegram link) + extract nonce",
+        "func": "// Misura solo per il messaggio che contiene il bottone CONFERMA (link)\n// Salva t0 su msg per poterlo leggere dopo il nodo Telegram Sender.\n\nconst p = msg.payload || {};\nconst opts = p.options || {};\nconst rm = (opts.reply_markup || '').toString();\n\n// Se non c'è reply_markup, non è il link telegram\nif (!rm) return msg;\n\n// Estrai nonce dal callback_data: \"CONFIRM|<nonce>\"\nlet nonce = msg._nonce;\nif (!nonce) {\n  const m = rm.match(/CONFIRM\\|([^\"\\s}]+)/);\n  if (m && m[1]) nonce = m[1];\n}\n\n// Se non riesco ad estrarre nonce, non misuro\nif (!nonce) return msg;\n\nmsg._metric = 'telegram_link_send';\nmsg._nonce = nonce;\nmsg._t0_ms = Date.now();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1290,
+        "y": 180,
+        "wires": [
+            [
+                "ee529be6bc57276d"
+            ]
+        ]
+    },
+    {
+        "id": "211ec6828a47ae75",
+        "type": "function",
+        "z": "7eaa885a5b382d28",
         "name": "Build Shadow UPDATE (desired+reported lock + cleanup)",
         "func": "let lockTarget = (msg.lockTarget || flow.get('lock') || 'chiusa').toString();\n\nmsg.payload = {\n  state: {\n    desired: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget\n    },\n    reported: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget,\n\n      // pulizia campi inutili (rimozione con null)\n      value: null,\n      pending: null,\n      reqid: null,\n      req_ts: null,\n      op: null,\n      op_ts: null,\n      action: null,\n      request: null\n    }\n  }\n};\n\n// Scrive last_error SOLO se presente in msg (può essere anche null per cancellarlo)\nif (Object.prototype.hasOwnProperty.call(msg, 'last_error')) {\n  msg.payload.state.reported.last_error = msg.last_error;\n}\n\nreturn msg;",
         "outputs": 1,
@@ -178,16 +197,16 @@
         "y": 280,
         "wires": [
             [
-                "97ad9347c5508d78",
-                "dd56b3cea463015e",
-                "d5e9c26d7ae58df3"
+                "b30b6c115980ea17",
+                "1558a67c9e3bb23a",
+                "6d75eff025e2c4ae"
             ]
         ]
     },
     {
-        "id": "d5e9c26d7ae58df3",
+        "id": "6d75eff025e2c4ae",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Publish custom lock_state to ESP",
         "func": "let lockTarget = (msg.lockTarget || (msg.payload && msg.payload.state && msg.payload.state.reported && msg.payload.state.reported.lock) || flow.get('lock') || 'chiusa').toString();\n\nmsg.topic = '$aws/things/esit-obj1/custom/lock_state';\nmsg.payload = lockTarget; // 'aperta' oppure 'chiusa'\nreturn msg;",
         "outputs": 1,
@@ -199,15 +218,15 @@
         "y": 400,
         "wires": [
             [
-                "765d7843305c5dd2",
-                "e3651b0eda817881"
+                "8b0b3848f1af8d75",
+                "8b044534835cbbc7"
             ]
         ]
     },
     {
-        "id": "765d7843305c5dd2",
+        "id": "8b0b3848f1af8d75",
         "type": "mqtt out",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "AWS Custom lock_state OUT",
         "topic": "",
         "qos": "0",
@@ -223,9 +242,9 @@
         "wires": []
     },
     {
-        "id": "e3651b0eda817881",
+        "id": "8b044534835cbbc7",
         "type": "debug",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "DEBUG custom lock_state",
         "active": true,
         "tosidebar": true,
@@ -238,9 +257,9 @@
         "wires": []
     },
     {
-        "id": "97ad9347c5508d78",
+        "id": "b30b6c115980ea17",
         "type": "mqtt out",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "AWS Shadow UPDATE",
         "topic": "$aws/things/esit-obj1/shadow/update",
         "qos": "0",
@@ -256,9 +275,9 @@
         "wires": []
     },
     {
-        "id": "a8f19b7a7a9f6167",
+        "id": "b33e351cd3410bde",
         "type": "telegram event",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Telegram Event (callback_query)",
         "bot": "00af2f8b6f9b79d7",
         "event": "callback_query",
@@ -267,14 +286,14 @@
         "y": 420,
         "wires": [
             [
-                "229d8fd2a2f554b1"
+                "8d40365a654a9611"
             ]
         ]
     },
     {
-        "id": "229d8fd2a2f554b1",
+        "id": "8d40365a654a9611",
         "type": "function",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Handle callback CONFIRM|nonce (<=10s)",
         "func": "const chatId = Number(env.get('chatid'));\nlet pending = flow.get('pending');\n\nlet data = (msg.payload && msg.payload.content) ? msg.payload.content : null;\n\nif (data && typeof data === 'object') {\n  data = data.data || data.content || null;\n}\nif (!data && msg.originalMessage && msg.originalMessage.callback_query && msg.originalMessage.callback_query.data) {\n  data = msg.originalMessage.callback_query.data;\n}\n\nif (!data || typeof data !== 'string') return null;\nif (!data.startsWith('CONFIRM|')) return null;\n\nlet nonce = data.split('|')[1] || '';\n\nif (!pending || !pending.nonce) {\n  return [null, { payload: { chatId, type: 'message', content: 'Nessuna richiesta in corso.' } }];\n}\n\nif (nonce !== pending.nonce) {\n  return [null, { payload: { chatId, type: 'message', content: 'Conferma non valida (nonce mismatch).' } }];\n}\n\nif (Date.now() > pending.expires) {\n  flow.set('pending', null);\n  let t = flow.get('pendingTimer');\n  if (t) clearTimeout(t);\n  flow.set('pendingTimer', null);\n\n  return [null, { payload: { chatId, type: 'message', content: 'Tempo scaduto: serratura NON aperta.' } }];\n}\n\nflow.set('pending', null);\nlet t = flow.get('pendingTimer');\nif (t) clearTimeout(t);\nflow.set('pendingTimer', null);\n\nreturn [\n  { lockTarget: 'aperta', reason: 'open' },\n  { payload: { chatId, type: 'message', content: 'Conferma ricevuta: serratura APERTA.' } }\n];",
         "outputs": 2,
@@ -287,17 +306,17 @@
         "y": 420,
         "wires": [
             [
-                "cf164636569e870a"
+                "211ec6828a47ae75"
             ],
             [
-                "fd2ca4bbe4351fea"
+                "ee529be6bc57276d"
             ]
         ]
     },
     {
-        "id": "fd2ca4bbe4351fea",
+        "id": "ee529be6bc57276d",
         "type": "telegram sender",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "Telegram Sender",
         "bot": "00af2f8b6f9b79d7",
         "haserroroutput": true,
@@ -306,17 +325,52 @@
         "y": 200,
         "wires": [
             [
-                "f79e0f6eecdc85d0"
+                "3077eb59eef5303a",
+                "4883c70da8266007"
             ],
             [
-                "953fd429f221889e"
+                "e9335edf529b28d8"
             ]
         ]
     },
     {
-        "id": "3821548efe6d0667",
+        "id": "4883c70da8266007",
+        "type": "function",
+        "z": "7eaa885a5b382d28",
+        "name": "CALC latency + DEBUG (Telegram link)",
+        "func": "// Calcola latency solo se proviene dal messaggio 'link' marcato prima del sender\nif (msg._metric !== 'telegram_link_send' || !msg._t0_ms || !msg._nonce) return null;\n\nconst t1 = Date.now();\nconst latency = t1 - Number(msg._t0_ms);\n\nmsg.payload = {\n  metric: 'telegram_link_send_latency_ms',\n  nonce: msg._nonce,\n  latency_ms: latency,\n  t0_ms: msg._t0_ms,\n  t1_ms: t1\n};\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1620,
+        "y": 180,
+        "wires": [
+            [
+                "dbef380b9ce4ddcb"
+            ]
+        ]
+    },
+    {
+        "id": "dbef380b9ce4ddcb",
         "type": "debug",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
+        "name": "DEBUG Telegram link latency",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 1880,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "942ebd2870eb74b8",
+        "type": "debug",
+        "z": "7eaa885a5b382d28",
         "name": "DEBUG req/other",
         "active": true,
         "tosidebar": true,
@@ -331,9 +385,9 @@
         "wires": []
     },
     {
-        "id": "dd56b3cea463015e",
+        "id": "1558a67c9e3bb23a",
         "type": "debug",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "DEBUG AWS update out",
         "active": true,
         "tosidebar": true,
@@ -348,9 +402,9 @@
         "wires": []
     },
     {
-        "id": "f79e0f6eecdc85d0",
+        "id": "3077eb59eef5303a",
         "type": "debug",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "DEBUG Telegram ok",
         "active": true,
         "tosidebar": true,
@@ -365,9 +419,9 @@
         "wires": []
     },
     {
-        "id": "953fd429f221889e",
+        "id": "e9335edf529b28d8",
         "type": "debug",
-        "z": "90b6e48de7eca51a",
+        "z": "7eaa885a5b382d28",
         "name": "DEBUG Telegram errors",
         "active": true,
         "tosidebar": true,
@@ -453,7 +507,7 @@
         "alpnprotocol": ""
     },
     {
-        "id": "880fa73244ebc11a",
+        "id": "6f53fef74f4f7823",
         "type": "global-config",
         "env": [],
         "modules": {
