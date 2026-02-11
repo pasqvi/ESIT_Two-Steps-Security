@@ -11,6 +11,8 @@
 #include <IRrecv.h>
 #include <IRutils.h>
 
+#include <Servo.h>  // <<< SERVO
+
 #define emptyString String()
 
 #include <configuration.h>
@@ -31,6 +33,13 @@
 
 // CODICE OK locale (per "CODICE ERRATO" su LCD)
 static const char CODE_OK[] = "0000";
+
+// -------------------- SERVO (simulazione serratura) --------------------
+Servo lockServo;
+
+// Posizioni servo (modifica se ti gira al contrario)
+static const uint8_t SERVO_CLOSED_ANGLE = 0;   // serratura chiusa
+static const uint8_t SERVO_OPEN_ANGLE   = 90;  // serratura aperta
 
 // -------------------- AWS IoT --------------------
 const int MQTT_PORT = 8883;
@@ -168,7 +177,7 @@ char decodeKeyFromIR(uint16_t command) {
   }
 }
 
-// -------------------- APPLY LOCK (solo aggiorna variabile globale + HW) --------------------
+// -------------------- APPLY LOCK (aggiorna variabile globale + SERVO) --------------------
 void applyLockBool(bool open) {
   serratura_aperta = open;
 
@@ -178,7 +187,8 @@ void applyLockBool(bool open) {
     bannerTimeout = false;
   }
 
-  digitalWrite(LOCK_PIN, serratura_aperta ? HIGH : LOW);
+  // Muove il servo in base allo stato
+  lockServo.write(serratura_aperta ? SERVO_OPEN_ANGLE : SERVO_CLOSED_ANGLE);
 
   Serial.print("LOCK_STATE (custom) -> ");
   Serial.println(serratura_aperta ? "aperta" : "chiusa");
@@ -441,8 +451,10 @@ void setup() {
   delay(1500);
   Serial.println();
 
-  pinMode(LOCK_PIN, OUTPUT);
-  digitalWrite(LOCK_PIN, LOW);
+  // --- SERVO ---
+  lockServo.attach(LOCK_PIN);
+  lockServo.write(SERVO_CLOSED_ANGLE); // stato iniziale coerente con serratura_aperta=false
+  delay(200);
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   lcd.begin();   // se la tua libreria richiede lcd.init(), sostituisci qui
