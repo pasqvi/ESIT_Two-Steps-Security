@@ -38,8 +38,8 @@ static const char CODE_OK[] = "0000";
 Servo lockServo;
 
 // Posizioni servo (modifica se ti gira al contrario)
-static const uint8_t SERVO_CLOSED_ANGLE = 0;   // serratura chiusa
-static const uint8_t SERVO_OPEN_ANGLE   = 90;  // serratura aperta
+static const uint8_t SERVO_CLOSED_ANGLE = 0;    // serratura chiusa
+static const uint8_t SERVO_OPEN_ANGLE   = 180;  // serratura aperta
 
 // -------------------- AWS IoT --------------------
 const int MQTT_PORT = 8883;
@@ -394,11 +394,7 @@ void sendIRCodeRequest(const String& code) {
 void updateLCDUi() {
   uint32_t ms = millis();
 
-  if (serratura_aperta) {
-    lcdWrite2("SERRATURA", "APERTA");
-    return;
-  }
-
+  // 1) banner "CODICE ERRATO"
   if (bannerWrong && ms < bannerWrongUntilMs) {
     lcdWrite2("CODICE ERRATO", "");
     return;
@@ -406,6 +402,7 @@ void updateLCDUi() {
     bannerWrong = false;
   }
 
+  // 2) banner timeout
   if (bannerTimeout && ms < bannerTimeoutUntilMs) {
     lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
     return;
@@ -413,6 +410,7 @@ void updateLCDUi() {
     bannerTimeout = false;
   }
 
+  // 3) countdown
   if (countdownActive) {
     if (ms >= countdownEndMs) {
       countdownActive = false;
@@ -443,7 +441,19 @@ void updateLCDUi() {
     return;
   }
 
-  lcdWrite2("SERRATURA", "CHIUSA");
+  // 4) MOSTRA CIFRE INSERITE (solo se buffer non vuoto)
+  if (codeBuffer.length() > 0) {
+    // "CODICE: " (8 char) + max 8 cifre = 16
+    lcdWrite2("CODICE: " + codeBuffer, "");
+    return;
+  }
+
+  // 5) stato serratura (default)
+  if (serratura_aperta) {
+    lcdWrite2("SERRATURA", "APERTA");
+  } else {
+    lcdWrite2("SERRATURA", "CHIUSA");
+  }
 }
 
 void setup() {
@@ -457,7 +467,7 @@ void setup() {
   delay(200);
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  lcd.begin();   // se la tua libreria richiede lcd.init(), sostituisci qui
+  lcd.begin();
   lcd.backlight();
   lcd.clear();
   lcdWrite2("AVVIO...", "");
