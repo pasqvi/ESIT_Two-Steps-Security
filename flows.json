@@ -142,7 +142,7 @@
         "type": "function",
         "z": "7eaa885a5b382d28",
         "name": "Process request (0000 + OK)",
-        "func": "const CODE_OK = '0000';\nconst chatId = Number(env.get('chatid'));\n\nlet req = msg.payload || {};\nlet code  = (req.code  || '').toString();\nlet nonce = (req.nonce || '').toString();\nlet ts    = Number(req.ts || 0);\nif (!ts || Number.isNaN(ts)) ts = Math.floor(Date.now() / 1000);\n\nif (!nonce) return null;\n\nlet lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction nowIT() {\n  try { return new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }); }\n  catch (e) { return new Date().toLocaleString('it-IT'); }\n}\n\nfunction cleanupShadowNoChange(extra) {\n  const out = { lockTarget: lock, reason: 'cleanup' };\n  if (extra && Object.prototype.hasOwnProperty.call(extra, 'last_error')) {\n    out.last_error = extra.last_error;\n  }\n  return out;\n}\n\n// Se c'è già una pending request, non sovrascrivere\nlet pending = flow.get('pending');\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Richiesta già in corso: premi CONFERMA entro 10 secondi.'\n      }\n    },\n    cleanupShadowNoChange({ last_error: null }),\n    null\n  ];\n}\n\n// CODICE ERRATO: Telegram + scrivi last_error + cleanup request\nif (code !== CODE_OK) {\n  const when = nowIT();\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: `🚫 Codice errato: accesso negato.\\nOra: ${when}`\n      }\n    },\n    cleanupShadowNoChange({\n      last_error: { type: 'wrong_code', msg: 'Codice errato', nonce, ts }\n    }),\n    null\n  ];\n}\n\n// CODICE CORRETTO\n\n// Se è CHIUSA -> serve conferma Telegram entro 10s\nif (lock === 'chiusa') {\n  let expires = Date.now() + 10000;\n  flow.set('pending', { nonce, expires });\n\n  let oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  let t = setTimeout(() => {\n    let p = flow.get('pending');\n    if (p && p.nonce === nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      flow.set('pendingTimer', null);\n      node.send([\n        {\n          payload: {\n            chatId,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        null\n      ]);\n    }\n  }, 10000);\n  flow.set('pendingTimer', t);\n\n  // Pulisco request e cancello eventuali errori precedenti\n  const cleanupMsg = cleanupShadowNoChange({ last_error: null });\n\n  return [\n    {\n      // PASSO IL NONCE ANCHE NEL MSG per metriche\n      _nonce: nonce,\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [ { text: 'CONFERMA', callback_data: 'CONFIRM|' + nonce } ]\n            ]\n          })\n        }\n      }\n    },\n    cleanupMsg,\n    null\n  ];\n}\n\n// Se è APERTA -> chiudi subito (senza Telegram)\nreturn [\n  {\n    payload: {\n      chatId,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  null\n];",
+        "func": "const CODE_OK = '0000';\nconst chatId = Number(env.get('chatid'));\n\nlet req = msg.payload || {};\nlet code  = (req.code  || '').toString();\nlet nonce = (req.nonce || '').toString();\nlet ts    = Number(req.ts || 0);\nif (!ts || Number.isNaN(ts)) ts = Math.floor(Date.now() / 1000);\n\nif (!nonce) return null;\n\nlet lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction nowIT() {\n  try { return new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }); }\n  catch (e) { return new Date().toLocaleString('it-IT'); }\n}\n\nfunction cleanupShadowNoChange(extra) {\n  const out = { lockTarget: lock, reason: 'cleanup' };\n  if (extra && Object.prototype.hasOwnProperty.call(extra, 'last_error')) {\n    out.last_error = extra.last_error;\n  }\n  return out;\n}\n\n// Se c'è già una pending request, non sovrascrivere\nlet pending = flow.get('pending');\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Richiesta già in corso: premi CONFERMA entro 10 secondi.'\n      }\n    },\n    cleanupShadowNoChange({ last_error: null }),\n    null\n  ];\n}\n\n// CODICE ERRATO: Telegram + scrivi last_error + cleanup request\nif (code !== CODE_OK) {\n  const when = nowIT();\n  return [\n    {\n      payload: {\n        chatId,\n        type: 'message',\n        content: `🚫 Codice errato: accesso negato.\\nData: ${when}`\n      }\n    },\n    cleanupShadowNoChange({\n      last_error: { type: 'wrong_code', msg: 'Codice errato', nonce, ts }\n    }),\n    null\n  ];\n}\n\n// CODICE CORRETTO\n\n// Se è CHIUSA -> serve conferma Telegram entro 10s\nif (lock === 'chiusa') {\n  let expires = Date.now() + 10000;\n  flow.set('pending', { nonce, expires });\n\n  let oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  let t = setTimeout(() => {\n    let p = flow.get('pending');\n    if (p && p.nonce === nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      flow.set('pendingTimer', null);\n      node.send([\n        {\n          payload: {\n            chatId,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        null\n      ]);\n    }\n  }, 10000);\n  flow.set('pendingTimer', t);\n\n  // Pulisco request e cancello eventuali errori precedenti\n  const cleanupMsg = cleanupShadowNoChange({ last_error: null });\n\n  return [\n    {\n      // PASSO IL NONCE ANCHE NEL MSG per metriche\n      _nonce: nonce,\n      payload: {\n        chatId,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [ { text: 'CONFERMA', callback_data: 'CONFIRM|' + nonce } ]\n            ]\n          })\n        }\n      }\n    },\n    cleanupMsg,\n    null\n  ];\n}\n\n// Se è APERTA -> chiudi subito (senza Telegram)\nreturn [\n  {\n    payload: {\n      chatId,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  null\n];",
         "outputs": 3,
         "timeout": "",
         "noerr": 0,
@@ -253,7 +253,7 @@
         "complete": "true",
         "targetType": "full",
         "x": 1320,
-        "y": 440,
+        "y": 540,
         "wires": []
     },
     {
@@ -322,7 +322,7 @@
         "haserroroutput": true,
         "outputs": 2,
         "x": 1330,
-        "y": 200,
+        "y": 240,
         "wires": [
             [
                 "3077eb59eef5303a",
@@ -344,7 +344,7 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1620,
+        "x": 1660,
         "y": 180,
         "wires": [
             [
@@ -363,7 +363,7 @@
         "tostatus": false,
         "complete": "payload",
         "targetType": "msg",
-        "x": 1880,
+        "x": 1960,
         "y": 180,
         "wires": []
     },
@@ -507,7 +507,7 @@
         "alpnprotocol": ""
     },
     {
-        "id": "6f53fef74f4f7823",
+        "id": "a4d056516ca2b17d",
         "type": "global-config",
         "env": [],
         "modules": {
