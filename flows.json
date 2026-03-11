@@ -181,7 +181,7 @@
         "type": "function",
         "z": "e243a5906dab8ec4",
         "name": "Process auth result from DB",
-        "func": "const req = msg.request || {};\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction cleanup(lockTarget, lastError) {\n  const out = { lockTarget: (lockTarget || lock), reason: 'cleanup' };\n  if (arguments.length >= 2) out.last_error = lastError;\n  return out;\n}\nfunction debug(reason, extra) {\n  return { payload: Object.assign({ reason, request: req }, extra || {}) };\n}\nfunction authEvent(evt) {\n  return { auth_event: evt };\n}\nfunction toUser(row) {\n  return {\n    id: row.id,\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\n\nconst user = rows.length > 0 ? toUser(rows[0]) : null;\nconst pending = flow.get('pending');\n\nif (pending && pending.nonce && Date.now() < pending.expires) {\n  if (user && user.status === 'ABILITATO' && user.telegram_id) {\n    return [\n      {\n        payload: {\n          chatId: user.telegram_id,\n          type: 'message',\n          content: 'Richiesta già in corso: attendi il completamento dell\\'operazione attuale.'\n        }\n      },\n      cleanup(lock, null),\n      debug('busy', { user }),\n      null\n    ];\n  }\n  return [null, cleanup(lock, null), debug('busy'), null];\n}\n\nif (!user) {\n  return [\n    null,\n    cleanup(lock, {\n      type: 'wrong_code',\n      msg: 'Codice non valido',\n      nonce: req.nonce,\n      ts: req.ts\n    }),\n    debug('wrong_code'),\n    authEvent({ event: 'wrong_code' })\n  ];\n}\n\nif (user.status !== 'ABILITATO') {\n  return [\n    null,\n    cleanup(lock, {\n      type: 'disabled_user',\n      msg: 'Utente disabilitato',\n      nonce: req.nonce,\n      ts: req.ts,\n      username: user.username\n    }),\n    debug('disabled_user', { user }),\n    authEvent({ event: 'disabled_user' })\n  ];\n}\n\nif (lock === 'chiusa') {\n  const expires = Date.now() + 10000;\n  flow.set('pending', {\n    nonce: req.nonce,\n    expires,\n    user,\n    code: req.code\n  });\n\n  const oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  const timer = setTimeout(() => {\n    const p = flow.get('pending');\n    if (p && p.nonce === req.nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      const t = flow.get('pendingTimer');\n      if (t) clearTimeout(t);\n      flow.set('pendingTimer', null);\n\n      node.send([\n        {\n          payload: {\n            chatId: user.telegram_id,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        debug('timeout', { user }),\n        authEvent({\n          event: 'confirm_timeout',\n          username: user.username,\n          src: 'telegram',\n          nonce: req.nonce\n        })\n      ]);\n    }\n  }, 10000);\n\n  flow.set('pendingTimer', timer);\n\n  return [\n    {\n      _nonce: req.nonce,\n      payload: {\n        chatId: user.telegram_id,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro 10 secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [{ text: 'CONFERMA', callback_data: 'CONFIRM|' + req.nonce }]\n            ]\n          })\n        }\n      }\n    },\n    cleanup(lock, null),\n    debug('countdown_start', { user }),\n    authEvent({\n      event: 'countdown_start',\n      nonce: req.nonce,\n      expires_ts: Math.floor(expires / 1000),\n      username: user.username,\n      src: 'telegram'\n    })\n  ];\n}\n\nreturn [\n  {\n    payload: {\n      chatId: user.telegram_id,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  debug('close', { user }),\n  authEvent({\n    event: 'close_authorized',\n    username: user.username,\n    src: (req.src || '').toString()\n  })\n];",
+        "func": "const req = msg.request || {};\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction cleanup(lockTarget, lastError) {\n  const out = { lockTarget: (lockTarget || lock), reason: 'cleanup' };\n  if (arguments.length >= 2) out.last_error = lastError;\n  return out;\n}\nfunction debug(reason, extra) {\n  return { payload: Object.assign({ reason, request: req }, extra || {}) };\n}\nfunction authEvent(evt) {\n  return { auth_event: evt };\n}\nfunction toUser(row) {\n  return {\n    id: row.id,\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nfunction toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nfunction getSecurityConfig() {\n  const raw = flow.get('securityConfig') || {};\n  return {\n    confirm_timeout_sec: Math.min(60, Math.max(5, toInt(raw.confirm_timeout_sec, 10))),\n    wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(raw.wrong_code_cooldown_sec, 0))),\n    max_wrong_attempts: Math.min(10, Math.max(1, toInt(raw.max_wrong_attempts, 3))),\n    lockout_duration_sec: Math.min(3600, Math.max(10, toInt(raw.lockout_duration_sec, 60))),\n    telegram_confirm_required: toBool(raw.telegram_confirm_required, true)\n  };\n}\nfunction clearPending() {\n  const t = flow.get('pendingTimer');\n  if (t) clearTimeout(t);\n  flow.set('pendingTimer', null);\n  flow.set('pending', null);\n}\nfunction resetAbuseState() {\n  flow.set('wrongAttemptsCount', 0);\n  flow.set('wrongCodeCooldownUntil', 0);\n  flow.set('lockoutUntil', 0);\n}\n\nconst cfg = getSecurityConfig();\nconst nowMs = Date.now();\nconst user = rows.length > 0 ? toUser(rows[0]) : null;\nconst pending = flow.get('pending');\n\nconst lockoutUntil = Number(flow.get('lockoutUntil') || 0);\nif (lockoutUntil > nowMs) {\n  const retryAfterSec = Math.max(1, Math.ceil((lockoutUntil - nowMs) / 1000));\n  return [\n    null,\n    cleanup(lock, {\n      type: 'lockout_active',\n      msg: 'Sistema temporaneamente bloccato per troppi errori',\n      retry_after_sec: retryAfterSec,\n      ts: Math.floor(nowMs / 1000)\n    }),\n    debug('lockout_active', { retry_after_sec: retryAfterSec, config: cfg }),\n    null\n  ];\n}\n\nconst wrongCodeCooldownUntil = Number(flow.get('wrongCodeCooldownUntil') || 0);\nif (wrongCodeCooldownUntil > nowMs) {\n  const retryAfterSec = Math.max(1, Math.ceil((wrongCodeCooldownUntil - nowMs) / 1000));\n  return [\n    null,\n    cleanup(lock, {\n      type: 'wrong_code_cooldown_active',\n      msg: 'Attendi prima di effettuare un nuovo tentativo',\n      retry_after_sec: retryAfterSec,\n      ts: Math.floor(nowMs / 1000)\n    }),\n    debug('wrong_code_cooldown_active', { retry_after_sec: retryAfterSec, config: cfg }),\n    null\n  ];\n}\n\nif (pending && pending.nonce && nowMs < pending.expires) {\n  if (user && user.status === 'ABILITATO' && user.telegram_id) {\n    return [\n      {\n        payload: {\n          chatId: user.telegram_id,\n          type: 'message',\n          content: 'Richiesta già in corso: attendi il completamento dell\\'operazione attuale.'\n        }\n      },\n      cleanup(lock, null),\n      debug('busy', { user, config: cfg }),\n      null\n    ];\n  }\n  return [null, cleanup(lock, null), debug('busy', { config: cfg }), null];\n}\n\nif (!user) {\n  let wrongAttempts = Number(flow.get('wrongAttemptsCount') || 0) + 1;\n  flow.set('wrongAttemptsCount', wrongAttempts);\n\n  if (wrongAttempts >= cfg.max_wrong_attempts) {\n    const until = nowMs + (cfg.lockout_duration_sec * 1000);\n    flow.set('wrongAttemptsCount', 0);\n    flow.set('wrongCodeCooldownUntil', 0);\n    flow.set('lockoutUntil', until);\n\n    return [\n      null,\n      cleanup(lock, {\n        type: 'lockout_started',\n        msg: 'Troppi codici errati: sistema temporaneamente bloccato',\n        retry_after_sec: cfg.lockout_duration_sec,\n        attempts_limit: cfg.max_wrong_attempts,\n        ts: Math.floor(nowMs / 1000)\n      }),\n      debug('lockout_started', {\n        attempts_limit: cfg.max_wrong_attempts,\n        lockout_duration_sec: cfg.lockout_duration_sec,\n        config: cfg\n      }),\n      authEvent({ event: 'wrong_code' })\n    ];\n  }\n\n  if (cfg.wrong_code_cooldown_sec > 0) {\n    flow.set('wrongCodeCooldownUntil', nowMs + (cfg.wrong_code_cooldown_sec * 1000));\n  } else {\n    flow.set('wrongCodeCooldownUntil', 0);\n  }\n\n  return [\n    null,\n    cleanup(lock, {\n      type: 'wrong_code',\n      msg: 'Codice non valido',\n      nonce: req.nonce,\n      ts: req.ts,\n      attempts_count: wrongAttempts,\n      attempts_remaining: Math.max(0, cfg.max_wrong_attempts - wrongAttempts)\n    }),\n    debug('wrong_code', {\n      attempts_count: wrongAttempts,\n      attempts_remaining: Math.max(0, cfg.max_wrong_attempts - wrongAttempts),\n      config: cfg\n    }),\n    authEvent({ event: 'wrong_code' })\n  ];\n}\n\nif (user.status !== 'ABILITATO') {\n  return [\n    null,\n    cleanup(lock, {\n      type: 'disabled_user',\n      msg: 'Utente disabilitato',\n      nonce: req.nonce,\n      ts: req.ts,\n      username: user.username\n    }),\n    debug('disabled_user', { user, config: cfg }),\n    authEvent({ event: 'disabled_user' })\n  ];\n}\n\nflow.set('wrongAttemptsCount', 0);\nflow.set('wrongCodeCooldownUntil', 0);\nflow.set('lockoutUntil', 0);\n\nif (lock === 'chiusa') {\n  if (!cfg.telegram_confirm_required) {\n    clearPending();\n    return [\n      {\n        payload: {\n          chatId: user.telegram_id,\n          type: 'message',\n          content: 'Codice corretto: serratura APERTA.'\n        }\n      },\n      { lockTarget: 'aperta', reason: 'open_direct', last_error: null },\n      debug('open_direct', { user, config: cfg }),\n      authEvent({\n        event: 'open_authorized',\n        username: user.username,\n        src: (req.src || '').toString(),\n        mode: 'direct'\n      })\n    ];\n  }\n\n  const confirmTimeoutMs = cfg.confirm_timeout_sec * 1000;\n  const expires = nowMs + confirmTimeoutMs;\n\n  flow.set('pending', {\n    nonce: req.nonce,\n    expires,\n    user,\n    code: req.code\n  });\n\n  const oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  const timer = setTimeout(() => {\n    const p = flow.get('pending');\n    if (p && p.nonce === req.nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      const t = flow.get('pendingTimer');\n      if (t) clearTimeout(t);\n      flow.set('pendingTimer', null);\n\n      node.send([\n        {\n          payload: {\n            chatId: user.telegram_id,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        debug('timeout', { user, config: cfg }),\n        authEvent({\n          event: 'confirm_timeout',\n          username: user.username,\n          src: 'telegram',\n          nonce: req.nonce,\n          timeout_sec: cfg.confirm_timeout_sec\n        })\n      ]);\n    }\n  }, confirmTimeoutMs);\n\n  flow.set('pendingTimer', timer);\n\n  return [\n    {\n      _nonce: req.nonce,\n      payload: {\n        chatId: user.telegram_id,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro ' + cfg.confirm_timeout_sec + ' secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [{ text: 'CONFERMA', callback_data: 'CONFIRM|' + req.nonce }]\n            ]\n          })\n        }\n      }\n    },\n    cleanup(lock, null),\n    debug('countdown_start', { user, config: cfg }),\n    authEvent({\n      event: 'countdown_start',\n      nonce: req.nonce,\n      expires_ts: Math.floor(expires / 1000),\n      username: user.username,\n      src: 'telegram',\n      timeout_sec: cfg.confirm_timeout_sec\n    })\n  ];\n}\n\nreturn [\n  {\n    payload: {\n      chatId: user.telegram_id,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  debug('close', { user, config: cfg }),\n  authEvent({\n    event: 'close_authorized',\n    username: user.username,\n    src: (req.src || '').toString()\n  })\n];",
         "outputs": 4,
         "timeout": "",
         "noerr": 0,
@@ -556,7 +556,7 @@
         "order": 1,
         "width": "24",
         "height": "24",
-        "format": "<div id=\"esit-dash-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-dash-{{$id}}{min-height:1100px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-dash-{{$id}} *{box-sizing:border-box}\n#esit-dash-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-dash-{{$id}} .guard .card,#esit-dash-{{$id}} .dash .card{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-dash-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-dash-{{$id}} .guard .card h2{\nmargin:0;\ncolor:#C9A227 !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .title{\nmargin:0;\ncolor:#fff !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .guard .card p{\ncolor:#ffffff !important;\nbackground:transparent !important;\nfont-size:16px !important;\nline-height:1.2 !important;\nmargin-top:10px !important;\nmargin-bottom:15px !important;\n}\n#esit-dash-{{$id}} .dash{display:none;max-width:1400px;margin:0 auto}\n#esit-dash-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}\n#esit-dash-{{$id}} .subtitle{margin-top:6px;color:#94a3b8}\n#esit-dash-{{$id}} .logout{background:#ef4444;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-dash-{{$id}} .section{margin:26px 0 12px 0;font-size:19px;font-weight:700;color:#fff}\n#esit-dash-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-dash-{{$id}} .card{padding:18px;min-height:185px;display:flex;flex-direction:column;justify-content:space-between}\n#esit-dash-{{$id}} .pill{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;background:rgba(37,99,235,.16);border:1px solid rgba(96,165,250,.35);color:#bfdbfe;font-size:11px;font-weight:700}\n#esit-dash-{{$id}} h3{margin:10px 0 8px 0;color:#C9A227 !important;font-size:17px; background: transparent !important}\n#esit-dash-{{$id}} p{margin:0;color:#fff !important;font-size:13px;line-height:1.6; background: transparent !important}\n#esit-dash-{{$id}} .btn{width:100%;padding:12px 16px;border:none;border-radius:12px;background:#1e293b;color:#e2e8f0;font-weight:700;cursor:pointer; margin-top: 10px}\n#esit-dash-{{$id}} .note{margin-top:22px;padding:16px 18px;border-radius:16px;border:1px solid #334155;background:rgba(30,41,59,.92);text-align:center;color:#94a3b8}\n</style>\n<div id=\"esit-dash-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n<div id=\"esit-dash-view-{{$id}}\" class=\"dash\">\n  <div class=\"topbar\">\n    <div>\n      <h1 class=\"title\">Dashboard Amministratore</h1>\n      <div class=\"subtitle\">Two-Steps Security</div>\n    </div>\n    <button id=\"esit-logout-btn-{{$id}}\" class=\"logout\">Logout</button>\n  </div>\n\n  <div class=\"section\">Gestione utenti</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">1</div><h3>Visualizzazione utenti</h3><p>Elenco utenti registrati nel sistema con stato e informazioni principali.</p></div><button id=\"esit-view-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">2</div><h3>Aggiunta utente</h3><p>Aggiungi nuovi utenti che potranno accedere al sistema.</p></div><button id=\"esit-add-user-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">3</div><h3>Modifica utente</h3><p>Aggiornamento dei dati dell'utente.</p></div><button id=\"esit-edit-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">4</div><h3>Disabilitazione utente</h3><p>Disabilitazione temporanea del profilo utente.</p></div><button id=\"esit-disable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">5</div><h3>Riabilitazione utente</h3><p>Riattivazione di un profilo precedentemente disabilitato.</p></div><button id=\"esit-enable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">6</div><h3>Eliminazione utente</h3><p>Rimozione del profilo utente dal sistema.</p></div><button id=\"esit-delete-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n  </div>\n\n  <div class=\"section\">Monitoraggio e sicurezza</div>\n  <div class=\"grid\">\n    <div class=\"card\">\n      <div>\n        <div class=\"pill\">7</div>\n        <h3>Monitoraggio attività utenti</h3>\n        <p>Storico eventi con filtri per data e username.</p>\n      </div><button id=\"esit-activity-log-btn-{{$id}}\" class=\"btn\">Vai</button>\n      </div>\n    <div class=\"card\"><div><div class=\"pill\">8</div><h3>Configurazione parametri di sicurezza</h3><p>Gestione countdown, impostazioni e parametri di sicurezza.</p></div><button class=\"btn\">Vai</button></div>\n  </div>\n\n  <div class=\"section\">Comandi serratura</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">9</div><h3>Apertura serratura Admin</h3><p>Comando remoto di apertura della serratura via dashboard.</p></div><button id=\"esit-open-btn-{{$id}}\" class=\"btn\">Apri</button></div>\n    <div class=\"card\"><div><div class=\"pill\">10</div><h3>Chiusura serratura Admin</h3><p>Comando remoto di chiusura della serratura via dashboard.</p></div><button id=\"esit-close-btn-{{$id}}\" class=\"btn\">Chiudi</button></div>\n  </div>\n\n  <div class=\"note\">Developed by <strong>Gruppo 1</strong></div>\n</div>\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-dash-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-dash-guard-\"+scope.$id);\n    var dash=document.getElementById(\"esit-dash-view-\"+scope.$id);\n    var logoutBtn=document.getElementById(\"esit-logout-btn-\"+scope.$id);\n    var addBtn=document.getElementById(\"esit-add-user-btn-\"+scope.$id);\n    var viewBtn=document.getElementById(\"esit-view-users-btn-\"+scope.$id);\n    var editBtn=document.getElementById(\"esit-edit-users-btn-\"+scope.$id);\n    var disableBtn=document.getElementById(\"esit-disable-users-btn-\"+scope.$id);\n    var enableBtn=document.getElementById(\"esit-enable-users-btn-\"+scope.$id);\n    var deleteBtn=document.getElementById(\"esit-delete-users-btn-\"+scope.$id);\n    var activityBtn=document.getElementById(\"esit-activity-log-btn-\"+scope.$id);\n    var openBtn=document.getElementById(\"esit-open-btn-\"+scope.$id);\n    var closeBtn=document.getElementById(\"esit-close-btn-\"+scope.$id);\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      dash.style.display=logged?\"block\":\"none\";\n      if(!logged) setTimeout(goLogin,3000);\n    }\n    logoutBtn.addEventListener(\"click\",function(){ window.sessionStorage.removeItem(AUTH_KEY); goLogin(); });\n    addBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Aggiunta Utente\"}}); });\n    viewBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Visualizzazione Utenti\"},page_action:\"view_users_load\"}); });\n    editBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Modifica Utenti\"},page_action:\"edit_users_load\"}); });\n    disableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Disabilitazione Utente\"},page_action:\"disable_users_load\"}); });\n    enableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Riabilitazione Utente\"},page_action:\"enable_users_load\"}); });\n    deleteBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Eliminazione Utente\"},page_action:\"delete_users_load\"}); });\n    activityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Monitoraggio Attività Utenti\"}}); });\n    openBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"open_lock\"}); });\n    closeBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"close_lock\"}); });\n    render();\n  }\n  init();\n})(scope);\n</script>\n</div>",
+        "format": "<div id=\"esit-dash-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-dash-{{$id}}{min-height:1100px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-dash-{{$id}} *{box-sizing:border-box}\n#esit-dash-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-dash-{{$id}} .guard .card,#esit-dash-{{$id}} .dash .card{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-dash-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-dash-{{$id}} .guard .card h2{\nmargin:0;\ncolor:#C9A227 !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .title{\nmargin:0;\ncolor:#fff !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .guard .card p{\ncolor:#ffffff !important;\nbackground:transparent !important;\nfont-size:16px !important;\nline-height:1.2 !important;\nmargin-top:10px !important;\nmargin-bottom:15px !important;\n}\n#esit-dash-{{$id}} .dash{display:none;max-width:1400px;margin:0 auto}\n#esit-dash-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}\n#esit-dash-{{$id}} .subtitle{margin-top:6px;color:#94a3b8}\n#esit-dash-{{$id}} .logout{background:#ef4444;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-dash-{{$id}} .section{margin:26px 0 12px 0;font-size:19px;font-weight:700;color:#fff}\n#esit-dash-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-dash-{{$id}} .card{padding:18px;min-height:185px;display:flex;flex-direction:column;justify-content:space-between}\n#esit-dash-{{$id}} .pill{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;background:rgba(37,99,235,.16);border:1px solid rgba(96,165,250,.35);color:#bfdbfe;font-size:11px;font-weight:700}\n#esit-dash-{{$id}} h3{margin:10px 0 8px 0;color:#C9A227 !important;font-size:17px; background: transparent !important}\n#esit-dash-{{$id}} p{margin:0;color:#fff !important;font-size:13px;line-height:1.6; background: transparent !important}\n#esit-dash-{{$id}} .btn{width:100%;padding:12px 16px;border:none;border-radius:12px;background:#1e293b;color:#e2e8f0;font-weight:700;cursor:pointer; margin-top: 10px}\n#esit-dash-{{$id}} .note{margin-top:22px;padding:16px 18px;border-radius:16px;border:1px solid #334155;background:rgba(30,41,59,.92);text-align:center;color:#94a3b8}\n</style>\n<div id=\"esit-dash-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n<div id=\"esit-dash-view-{{$id}}\" class=\"dash\">\n  <div class=\"topbar\">\n    <div>\n      <h1 class=\"title\">Dashboard Amministratore</h1>\n      <div class=\"subtitle\">Two-Steps Security</div>\n    </div>\n    <button id=\"esit-logout-btn-{{$id}}\" class=\"logout\">Logout</button>\n  </div>\n\n  <div class=\"section\">Gestione utenti</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">1</div><h3>Visualizzazione utenti</h3><p>Elenco utenti registrati nel sistema con stato e informazioni principali.</p></div><button id=\"esit-view-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">2</div><h3>Aggiunta utente</h3><p>Aggiungi nuovi utenti che potranno accedere al sistema.</p></div><button id=\"esit-add-user-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">3</div><h3>Modifica utente</h3><p>Aggiornamento dei dati dell'utente.</p></div><button id=\"esit-edit-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">4</div><h3>Disabilitazione utente</h3><p>Disabilitazione temporanea del profilo utente.</p></div><button id=\"esit-disable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">5</div><h3>Riabilitazione utente</h3><p>Riattivazione di un profilo precedentemente disabilitato.</p></div><button id=\"esit-enable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">6</div><h3>Eliminazione utente</h3><p>Rimozione del profilo utente dal sistema.</p></div><button id=\"esit-delete-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n  </div>\n\n  <div class=\"section\">Monitoraggio e sicurezza</div>\n  <div class=\"grid\">\n    <div class=\"card\">\n      <div>\n        <div class=\"pill\">7</div>\n        <h3>Monitoraggio attività utenti</h3>\n        <p>Storico eventi con filtri per data e username.</p>\n      </div><button id=\"esit-activity-log-btn-{{$id}}\" class=\"btn\">Vai</button>\n      </div>\n<div class=\"card\">\n  <div>\n    <div class=\"pill\">8</div>\n    <h3>Configurazione parametri di sicurezza</h3>\n    <p>Gestione countdown, impostazioni e parametri di sicurezza.</p>\n  </div><button id=\"esit-security-config-btn-{{$id}}\" class=\"btn\">Vai</button>\n</div>  </div>\n\n  <div class=\"section\">Comandi serratura</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">9</div><h3>Apertura serratura Admin</h3><p>Comando remoto di apertura della serratura via dashboard.</p></div><button id=\"esit-open-btn-{{$id}}\" class=\"btn\">Apri</button></div>\n    <div class=\"card\"><div><div class=\"pill\">10</div><h3>Chiusura serratura Admin</h3><p>Comando remoto di chiusura della serratura via dashboard.</p></div><button id=\"esit-close-btn-{{$id}}\" class=\"btn\">Chiudi</button></div>\n  </div>\n\n  <div class=\"note\">Developed by <strong>Gruppo 1</strong></div>\n</div>\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-dash-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-dash-guard-\"+scope.$id);\n    var dash=document.getElementById(\"esit-dash-view-\"+scope.$id);\n    var logoutBtn=document.getElementById(\"esit-logout-btn-\"+scope.$id);\n    var addBtn=document.getElementById(\"esit-add-user-btn-\"+scope.$id);\n    var viewBtn=document.getElementById(\"esit-view-users-btn-\"+scope.$id);\n    var editBtn=document.getElementById(\"esit-edit-users-btn-\"+scope.$id);\n    var disableBtn=document.getElementById(\"esit-disable-users-btn-\"+scope.$id);\n    var enableBtn=document.getElementById(\"esit-enable-users-btn-\"+scope.$id);\n    var deleteBtn=document.getElementById(\"esit-delete-users-btn-\"+scope.$id);\n    var securityBtn=document.getElementById(\"esit-security-config-btn-\"+scope.$id);\n    var activityBtn=document.getElementById(\"esit-activity-log-btn-\"+scope.$id);\n    var openBtn=document.getElementById(\"esit-open-btn-\"+scope.$id);\n    var closeBtn=document.getElementById(\"esit-close-btn-\"+scope.$id);\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      dash.style.display=logged?\"block\":\"none\";\n      if(!logged) setTimeout(goLogin,3000);\n    }\n    logoutBtn.addEventListener(\"click\",function(){ window.sessionStorage.removeItem(AUTH_KEY); goLogin(); });\n    addBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Aggiunta Utente\"}}); });\n    viewBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Visualizzazione Utenti\"},page_action:\"view_users_load\"}); });\n    editBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Modifica Utenti\"},page_action:\"edit_users_load\"}); });\n    disableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Disabilitazione Utente\"},page_action:\"disable_users_load\"}); });\n    enableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Riabilitazione Utente\"},page_action:\"enable_users_load\"}); });\n    deleteBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Eliminazione Utente\"},page_action:\"delete_users_load\"}); });\n    securityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Configurazione Sicurezza\"}}); });\n    activityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Monitoraggio Attività Utenti\"}}); });\n    openBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"open_lock\"}); });\n    closeBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"close_lock\"}); });\n    render();\n  }\n  init();\n})(scope);\n</script>\n</div>",
         "storeOutMessages": false,
         "fwdInMessages": false,
         "resendOnRefresh": true,
@@ -1749,6 +1749,213 @@
         ]
     },
     {
+        "id": "f501c1d2e3a4b503",
+        "type": "inject",
+        "z": "e243a5906dab8ec4",
+        "name": "On start -> Load security config",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.8,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 240,
+        "y": 2100,
+        "wires": [
+            [
+                "f501c1d2e3a4b505"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b504",
+        "type": "ui_template",
+        "z": "e243a5906dab8ec4",
+        "group": "f501c1d2e3a4b502",
+        "name": "Security Config Page",
+        "order": 1,
+        "width": "24",
+        "height": "18",
+        "format": "<div id=\"esit-security-config-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-security-config-{{$id}}{min-height:760px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-security-config-{{$id}} *{box-sizing:border-box}\n#esit-security-config-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-security-config-{{$id}} .guard .card,#esit-security-config-{{$id}} .panel{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-security-config-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-security-config-{{$id}} .guard h2{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .guard p{margin-top:16px;color:#fff !important;background:transparent !important}\n#esit-security-config-{{$id}} .view{display:none;max-width:980px;margin:0 auto}\n#esit-security-config-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:22px}\n#esit-security-config-{{$id}} h1{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .sub{margin-top:6px;color:#94a3b8}\n#esit-security-config-{{$id}} .actions{display:flex;gap:10px;flex-wrap:wrap}\n#esit-security-config-{{$id}} .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-security-config-{{$id}} .back{background:#1e293b;color:#e2e8f0}\n#esit-security-config-{{$id}} .refresh{background:#475569;color:#fff}\n#esit-security-config-{{$id}} .save{background:#2563eb;color:#fff}\n#esit-security-config-{{$id}} .panel{padding:24px}\n#esit-security-config-{{$id}} label{display:block;margin:0 0 8px 0;color:#cbd5e1;font-size:13px;font-weight:700}\n#esit-security-config-{{$id}} input,#esit-security-config-{{$id}} select{width:100%;margin:0 0 16px 0;padding:12px 14px;border-radius:12px;border:1px solid #334155;background:#0b1220;color:#e5e7eb}\n#esit-security-config-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-security-config-{{$id}} .status{display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #334155}\n#esit-security-config-{{$id}} .status.ok{display:block;background:rgba(20,83,45,.45);border-color:rgba(34,197,94,.45);color:#bbf7d0}\n#esit-security-config-{{$id}} .status.err{display:block;background:rgba(127,29,29,.55);border-color:rgba(220,38,38,.5);color:#fecaca}\n#esit-security-config-{{$id}} .help{margin-top:18px;color:#94a3b8;font-size:13px;line-height:1.6}\n</style>\n\n<div id=\"esit-security-config-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n\n<div id=\"esit-security-config-view-{{$id}}\" class=\"view\">\n  <div class=\"topbar\">\n    <div>\n      <h1>Configurazione parametri di sicurezza</h1>\n      <div class=\"sub\">Gestione timeout, anti-abuso e conferma Telegram.</div>\n    </div>\n    <div class=\"actions\">\n      <button id=\"esit-security-reload-btn-{{$id}}\" class=\"btn refresh\">Ricarica valori</button>\n      <button id=\"esit-security-back-btn-{{$id}}\" class=\"btn back\">Torna alla dashboard</button>\n    </div>\n  </div>\n\n  <div class=\"panel\">\n    <div class=\"grid\">\n      <div>\n        <label for=\"esit-confirm-timeout-{{$id}}\">Timeout conferma Telegram (secondi)</label>\n        <input id=\"esit-confirm-timeout-{{$id}}\" type=\"number\" min=\"5\" max=\"60\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-wrong-code-cooldown-{{$id}}\">Cooldown dopo codice errato (secondi)</label>\n        <input id=\"esit-wrong-code-cooldown-{{$id}}\" type=\"number\" min=\"0\" max=\"30\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-max-wrong-attempts-{{$id}}\">Tentativi errati massimi consecutivi</label>\n        <input id=\"esit-max-wrong-attempts-{{$id}}\" type=\"number\" min=\"1\" max=\"10\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-lockout-duration-{{$id}}\">Durata blocco dopo troppi errori (secondi)</label>\n        <input id=\"esit-lockout-duration-{{$id}}\" type=\"number\" min=\"10\" max=\"3600\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-telegram-required-{{$id}}\">Conferma Telegram obbligatoria</label>\n        <select id=\"esit-telegram-required-{{$id}}\">\n          <option value=\"true\">ON</option>\n          <option value=\"false\">OFF</option>\n        </select>\n      </div>\n    </div>\n\n    <button id=\"esit-security-save-btn-{{$id}}\" class=\"btn save\">Salva configurazione</button>\n    <div id=\"esit-security-config-status-{{$id}}\" class=\"status\"></div>\n\n    <div class=\"help\">\n      I nuovi valori vengono salvati nel database e caricati automaticamente ai successivi riavvii del sistema.\n    </div>\n  </div>\n</div>\n\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-security-config-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-security-config-guard-\"+scope.$id);\n    var view=document.getElementById(\"esit-security-config-view-\"+scope.$id);\n    var backBtn=document.getElementById(\"esit-security-back-btn-\"+scope.$id);\n    var reloadBtn=document.getElementById(\"esit-security-reload-btn-\"+scope.$id);\n    var saveBtn=document.getElementById(\"esit-security-save-btn-\"+scope.$id);\n    var statusBox=document.getElementById(\"esit-security-config-status-\"+scope.$id);\n\n    var confirmTimeout=document.getElementById(\"esit-confirm-timeout-\"+scope.$id);\n    var wrongCodeCooldown=document.getElementById(\"esit-wrong-code-cooldown-\"+scope.$id);\n    var maxWrongAttempts=document.getElementById(\"esit-max-wrong-attempts-\"+scope.$id);\n    var lockoutDuration=document.getElementById(\"esit-lockout-duration-\"+scope.$id);\n    var telegramRequired=document.getElementById(\"esit-telegram-required-\"+scope.$id);\n\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function goDash(){ scope.send({payload:{tab:\"Admin Dashboard\"}}); }\n    function load(){ scope.send({page_action:\"security_config_load\"}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      view.style.display=logged?\"block\":\"none\";\n      if(!logged){ setTimeout(goLogin,3000); return; }\n      load();\n    }\n    function setStatus(kind,msg){\n      statusBox.className=\"status\";\n      statusBox.textContent=msg||\"\";\n      if(!msg) return;\n      statusBox.classList.add(kind===\"success\"?\"ok\":\"err\");\n    }\n    function clearStatus(){ statusBox.className=\"status\"; statusBox.textContent=\"\"; }\n    function renderConfig(cfg){\n      if(!cfg) return;\n      confirmTimeout.value = String(cfg.confirm_timeout_sec);\n      wrongCodeCooldown.value = String(cfg.wrong_code_cooldown_sec);\n      maxWrongAttempts.value = String(cfg.max_wrong_attempts);\n      lockoutDuration.value = String(cfg.lockout_duration_sec);\n      telegramRequired.value = cfg.telegram_confirm_required ? \"true\" : \"false\";\n    }\n    function save(){\n      clearStatus();\n      scope.send({\n        page_action:\"security_config_save\",\n        config:{\n          confirm_timeout_sec:(confirmTimeout.value||\"\").trim(),\n          wrong_code_cooldown_sec:(wrongCodeCooldown.value||\"\").trim(),\n          max_wrong_attempts:(maxWrongAttempts.value||\"\").trim(),\n          lockout_duration_sec:(lockoutDuration.value||\"\").trim(),\n          telegram_confirm_required:(telegramRequired.value||\"true\").trim()\n        }\n      });\n    }\n\n    backBtn.addEventListener(\"click\",goDash);\n    reloadBtn.addEventListener(\"click\",load);\n    saveBtn.addEventListener(\"click\",save);\n    [confirmTimeout,wrongCodeCooldown,maxWrongAttempts,lockoutDuration].forEach(function(el){ el.addEventListener(\"input\",clearStatus); });\n    telegramRequired.addEventListener(\"change\",clearStatus);\n    render();\n\n    scope.$watch(\"msg\", function(msg){\n      if(!msg || !msg.payload) return;\n      if(msg.payload.security_feedback) setStatus(msg.payload.security_feedback.status, msg.payload.security_feedback.message);\n      if(msg.payload.config) renderConfig(msg.payload.config);\n    });\n  }\n  init();\n})(scope);\n</script>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 530,
+        "y": 2040,
+        "wires": [
+            [
+                "f501c1d2e3a4b506",
+                "f501c1d2e3a4b509",
+                "6ce7183d4c797698"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b505",
+        "type": "postgresql",
+        "z": "e243a5906dab8ec4",
+        "name": "DB Load security config",
+        "query": "SELECT id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required FROM sicurezza_config WHERE id = 1 LIMIT 1;",
+        "postgreSQLConfig": "fdbf6757387d9448",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 870,
+        "y": 2100,
+        "wires": [
+            [
+                "f501c1d2e3a4b507"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b506",
+        "type": "function",
+        "z": "e243a5906dab8ec4",
+        "name": "Prepare security config load",
+        "func": "if ((msg.page_action || '').toString() !== 'security_config_load') return null;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 2000,
+        "wires": [
+            [
+                "f501c1d2e3a4b505"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b507",
+        "type": "function",
+        "z": "e243a5906dab8ec4",
+        "name": "Format security config load + cache",
+        "func": "function toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nconst defaults = {\n  confirm_timeout_sec: 10,\n  wrong_code_cooldown_sec: 0,\n  max_wrong_attempts: 3,\n  lockout_duration_sec: 60,\n  telegram_confirm_required: true\n};\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst row = rows.length > 0 ? rows[0] : {};\nconst cfg = {\n  confirm_timeout_sec: Math.min(60, Math.max(5, toInt(row.confirm_timeout_sec, defaults.confirm_timeout_sec))),\n  wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(row.wrong_code_cooldown_sec, defaults.wrong_code_cooldown_sec))),\n  max_wrong_attempts: Math.min(10, Math.max(1, toInt(row.max_wrong_attempts, defaults.max_wrong_attempts))),\n  lockout_duration_sec: Math.min(3600, Math.max(10, toInt(row.lockout_duration_sec, defaults.lockout_duration_sec))),\n  telegram_confirm_required: toBool(row.telegram_confirm_required, defaults.telegram_confirm_required)\n};\nflow.set('securityConfig', cfg);\nmsg.payload = { config: cfg };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1190,
+        "y": 2100,
+        "wires": [
+            [
+                "f501c1d2e3a4b504"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b509",
+        "type": "function",
+        "z": "e243a5906dab8ec4",
+        "name": "Prepare security config save",
+        "func": "if ((msg.page_action || '').toString() !== 'security_config_save') return null;\n\nconst c = msg.config || {};\nfunction fail(message) {\n  return { payload: { security_feedback: { status: 'error', message } } };\n}\nfunction parseIntStrict(value, name) {\n  const s = (value || '').toString().trim();\n  if (!/^[-]?[0-9]+$/.test(s)) throw new Error(name + ' non valido.');\n  return Number(s);\n}\nlet confirmTimeout, wrongCodeCooldown, maxWrongAttempts, lockoutDuration;\ntry {\n  confirmTimeout = parseIntStrict(c.confirm_timeout_sec, 'Timeout conferma Telegram');\n  wrongCodeCooldown = parseIntStrict(c.wrong_code_cooldown_sec, 'Cooldown dopo codice errato');\n  maxWrongAttempts = parseIntStrict(c.max_wrong_attempts, 'Tentativi errati massimi');\n  lockoutDuration = parseIntStrict(c.lockout_duration_sec, 'Durata blocco');\n} catch (e) {\n  return [null, fail(e.message)];\n}\nif (confirmTimeout < 5 || confirmTimeout > 60) return [null, fail('Timeout conferma Telegram: usa un valore tra 5 e 60 secondi.')];\nif (wrongCodeCooldown < 0 || wrongCodeCooldown > 30) return [null, fail('Cooldown dopo codice errato: usa un valore tra 0 e 30 secondi.')];\nif (maxWrongAttempts < 1 || maxWrongAttempts > 10) return [null, fail('Tentativi errati massimi: usa un valore tra 1 e 10.')];\nif (lockoutDuration < 10 || lockoutDuration > 3600) return [null, fail('Durata blocco: usa un valore tra 10 e 3600 secondi.')];\n\nlet telegramRequired = (c.telegram_confirm_required || '').toString().trim().toLowerCase();\nif (telegramRequired !== 'true' && telegramRequired !== 'false') {\n  return [null, fail('Conferma Telegram obbligatoria: valore non valido.')];\n}\ntelegramRequired = (telegramRequired === 'true');\n\nmsg.params = [\n  1,\n  confirmTimeout,\n  wrongCodeCooldown,\n  maxWrongAttempts,\n  lockoutDuration,\n  telegramRequired\n];\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 870,
+        "y": 2040,
+        "wires": [
+            [
+                "f501c1d2e3a4b510"
+            ],
+            [
+                "f501c1d2e3a4b504"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b510",
+        "type": "postgresql",
+        "z": "e243a5906dab8ec4",
+        "name": "DB Save security config",
+        "query": "INSERT INTO sicurezza_config (id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6, NOW())\nON CONFLICT (id) DO UPDATE SET\n  confirm_timeout_sec = EXCLUDED.confirm_timeout_sec,\n  wrong_code_cooldown_sec = EXCLUDED.wrong_code_cooldown_sec,\n  max_wrong_attempts = EXCLUDED.max_wrong_attempts,\n  lockout_duration_sec = EXCLUDED.lockout_duration_sec,\n  telegram_confirm_required = EXCLUDED.telegram_confirm_required,\n  updated_at = NOW()\nRETURNING id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required;",
+        "postgreSQLConfig": "fdbf6757387d9448",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 1180,
+        "y": 2040,
+        "wires": [
+            [
+                "f501c1d2e3a4b511"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b511",
+        "type": "function",
+        "z": "e243a5906dab8ec4",
+        "name": "Format security config save + cache",
+        "func": "function toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst row = rows.length > 0 ? rows[0] : {};\nconst cfg = {\n  confirm_timeout_sec: Math.min(60, Math.max(5, toInt(row.confirm_timeout_sec, 10))),\n  wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(row.wrong_code_cooldown_sec, 0))),\n  max_wrong_attempts: Math.min(10, Math.max(1, toInt(row.max_wrong_attempts, 3))),\n  lockout_duration_sec: Math.min(3600, Math.max(10, toInt(row.lockout_duration_sec, 60))),\n  telegram_confirm_required: toBool(row.telegram_confirm_required, true)\n};\nflow.set('securityConfig', cfg);\nmsg.payload = {\n  security_feedback: {\n    status: 'success',\n    message: 'Configurazione di sicurezza salvata con successo.'\n  },\n  config: cfg\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1490,
+        "y": 2040,
+        "wires": [
+            [
+                "f501c1d2e3a4b504"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b512",
+        "type": "catch",
+        "z": "e243a5906dab8ec4",
+        "name": "Catch security config DB errors",
+        "scope": [
+            "f501c1d2e3a4b505",
+            "f501c1d2e3a4b510"
+        ],
+        "uncaught": false,
+        "x": 890,
+        "y": 2160,
+        "wires": [
+            [
+                "f501c1d2e3a4b513"
+            ]
+        ]
+    },
+    {
+        "id": "f501c1d2e3a4b513",
+        "type": "function",
+        "z": "e243a5906dab8ec4",
+        "name": "Format security config DB error",
+        "func": "const errorText = (msg.error && msg.error.message) ? msg.error.message.toString() : 'Errore database';\nmsg.payload = {\n  security_feedback: {\n    status: 'error',\n    message: 'Errore database durante il salvataggio/caricamento configurazione: ' + errorText\n  }\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1200,
+        "y": 2160,
+        "wires": [
+            [
+                "f501c1d2e3a4b504"
+            ]
+        ]
+    },
+    {
         "id": "dce9fd25d42782af",
         "type": "mqtt-broker",
         "name": "AWS_IOT",
@@ -1943,6 +2150,17 @@
         "className": ""
     },
     {
+        "id": "f501c1d2e3a4b502",
+        "type": "ui_group",
+        "name": "",
+        "tab": "f501c1d2e3a4b501",
+        "order": 1,
+        "disp": true,
+        "width": "24",
+        "collapse": false,
+        "className": ""
+    },
+    {
         "id": "4045e33e7770beeb",
         "type": "tls-config",
         "name": "asset1certs",
@@ -2037,7 +2255,15 @@
         "hidden": false
     },
     {
-        "id": "ea5332e5d098180d",
+        "id": "f501c1d2e3a4b501",
+        "type": "ui_tab",
+        "name": "Configurazione Sicurezza",
+        "icon": "settings",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "9e94275f9d0b515e",
         "type": "global-config",
         "env": [],
         "modules": {
