@@ -11,7 +11,7 @@
 #include <IRrecv.h>
 #include <IRutils.h>
 
-#include <Servo.h>  // <<< SERVO
+#include <Servo.h>
 
 #define emptyString String()
 
@@ -20,26 +20,22 @@
 
 // -------------------- PIN --------------------
 #define IR_PIN   D5
-#define LOCK_PIN D6   // D1 è SCL I2C, quindi NON usarlo come LOCK_PIN
+#define LOCK_PIN D6
 
 // LCD I2C
 #define I2C_SDA_PIN D2
 #define I2C_SCL_PIN D1
 
-// LCD (se non va 0x27 prova 0x3F)
+// LCD
 #define LCD_ADDR 0x27
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
-// CODICE OK locale (per "CODICE ERRATO" su LCD)
-static const char CODE_OK[] = "0000";
-
-// -------------------- SERVO (simulazione serratura) --------------------
+// -------------------- SERVO --------------------
 Servo lockServo;
 
-// Posizioni servo (modifica se ti gira al contrario)
-static const uint8_t SERVO_CLOSED_ANGLE = 0;    // serratura chiusa
-static const uint8_t SERVO_OPEN_ANGLE   = 180;  // serratura aperta
+static const uint8_t SERVO_CLOSED_ANGLE = 0;
+static const uint8_t SERVO_OPEN_ANGLE   = 180;
 
 // -------------------- AWS IoT --------------------
 const int MQTT_PORT = 8883;
@@ -49,8 +45,8 @@ const char TOPIC_GET_ACCEPTED[]    = "$aws/things/" THINGNAME "/shadow/get/accep
 const char TOPIC_UPDATE[]          = "$aws/things/" THINGNAME "/shadow/update";
 const char TOPIC_UPDATE_ACCEPTED[] = "$aws/things/" THINGNAME "/shadow/update/accepted";
 
-// Topic custom: Node-RED -> ESP (stato lock "aperta"/"chiusa")
 const char TOPIC_LOCK_STATE[]      = "$aws/things/" THINGNAME "/custom/lock_state";
+const char TOPIC_AUTH_EVENT[]      = "$aws/things/" THINGNAME "/custom/auth_event";
 
 WiFiClientSecure net;
 BearSSL::X509List cert(cacert);
@@ -65,8 +61,8 @@ decode_results results;
 
 String codeBuffer = "";
 
-// -------------------- STATO SERRATURA (VERITÀ PER LCD) --------------------
-bool serratura_aperta = false;   // false=chiusa, true=aperta
+// -------------------- STATO SERRATURA --------------------
+bool serratura_aperta = false;
 
 // -------------------- TIME --------------------
 time_t now;
@@ -78,9 +74,12 @@ LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
 String lcdLast0 = "";
 String lcdLast1 = "";
 
-// Banner + countdown (LOCAL)
+// -------------------- UI / BANNER --------------------
 bool bannerWrong = false;
 uint32_t bannerWrongUntilMs = 0;
+
+bool bannerDisabled = false;
+uint32_t bannerDisabledUntilMs = 0;
 
 bool bannerTimeout = false;
 uint32_t bannerTimeoutUntilMs = 0;
@@ -89,20 +88,26 @@ bool countdownActive = false;
 uint32_t countdownEndMs = 0;
 int lastCountdownShown = -1;
 
-// Shadow GET periodico (fallback/debug)
+bool backendCheckActive = false;
+uint32_t backendCheckStartMs = 0;
+
+// Shadow GET periodico
 uint32_t lastShadowGetMs = 0;
 const uint32_t SHADOW_GET_PERIOD_MS = 20000;
 
-// -------------------- TEST TIMING (BASATO SU serratura_aperta) --------------------
-// TestAutenticazioneCompleta: da pressione OK (codice corretto, serratura chiusa) -> serratura_aperta==true
+// -------------------- TEST TIMING --------------------
+bool authCandidatePending = false;
+uint32_t authCandidateStartMs = 0;
+
+bool closeCandidatePending = false;
+uint32_t closeCandidateStartMs = 0;
+
 bool testAuthRunning = false;
 uint32_t testAuthStartMs = 0;
 
-// TestChiusuraSerratura: da pressione OK (codice corretto, serratura aperta) -> serratura_aperta==false
 bool testCloseRunning = false;
 uint32_t testCloseStartMs = 0;
 
-// timeout di sicurezza
 const uint32_t TEST_AUTH_TIMEOUT_MS  = 30000;
 const uint32_t TEST_CLOSE_TIMEOUT_MS = 30000;
 
@@ -118,7 +123,7 @@ void printTestTime(const char* name, uint32_t elapsedMs, const char* suffix = nu
   Serial.println();
 }
 
-// -------------------- UTILS LCD --------------------
+// -------------------- LCD helpers --------------------
 static String pad16(const String& s) {
   if (s.length() == 16) return s;
   if (s.length() > 16) return s.substring(0, 16);
@@ -147,15 +152,53 @@ void startWrongBanner() {
   bannerWrongUntilMs = millis() + 3000;
 }
 
+void startDisabledBanner() {
+  bannerDisabled = true;
+  bannerDisabledUntilMs = millis() + 3000;
+}
+
 void startTimeoutBanner() {
   bannerTimeout = true;
   bannerTimeoutUntilMs = millis() + 3000;
 }
 
-void startCountdown10s() {
-  countdownActive = true;
-  countdownEndMs = millis() + 10000;
+void startBackendCheck() {
+  backendCheckActive = true;
+  backendCheckStartMs = millis();
+}
+
+void stopBackendCheck() {
+  backendCheckActive = false;
+}
+
+void cancelPendingOperationState() {
+  stopBackendCheck();
+  countdownActive = false;
   lastCountdownShown = -1;
+  authCandidatePending = false;
+  closeCandidatePending = false;
+  testAuthRunning = false;
+  testCloseRunning = false;
+}
+
+void startCountdownMs(uint32_t remainingMs) {
+  stopBackendCheck();
+  countdownActive = true;
+  countdownEndMs = millis() + remainingMs;
+  lastCountdownShown = -1;
+}
+
+void startCountdownSeconds(uint32_t seconds) {
+  uint64_t remainingMs64 = (uint64_t)seconds * 1000ULL;
+  if (remainingMs64 > 0xFFFFFFFFULL) remainingMs64 = 0xFFFFFFFFULL;
+  startCountdownMs((uint32_t)remainingMs64);
+}
+
+void startCountdownUntilEpoch(uint32_t expiresTs) {
+  time_t nowTs = time(nullptr);
+  int64_t remainingSec = (int64_t)expiresTs - (int64_t)nowTs;
+  if (remainingSec < 0) remainingSec = 0;
+  startCountdownSeconds((uint32_t)remainingSec);
 }
 
 // -------------------- IR decode --------------------
@@ -177,24 +220,23 @@ char decodeKeyFromIR(uint16_t command) {
   }
 }
 
-// -------------------- APPLY LOCK (aggiorna variabile globale + SERVO) --------------------
+// -------------------- APPLY LOCK --------------------
 void applyLockBool(bool open) {
   serratura_aperta = open;
 
-  // stop countdown se arriva apertura vera
+  stopBackendCheck();
+
   if (serratura_aperta) {
     countdownActive = false;
     bannerTimeout = false;
   }
 
-  // Muove il servo in base allo stato
   lockServo.write(serratura_aperta ? SERVO_OPEN_ANGLE : SERVO_CLOSED_ANGLE);
 
-  Serial.print("LOCK_STATE (custom) -> ");
+  Serial.print("LOCK_STATE (custom/shadow) -> ");
   Serial.println(serratura_aperta ? "aperta" : "chiusa");
 }
 
-// Parser minimale: accetta "aperta"/"chiusa" o JSON contenente quei token
 void parseCustomLockPayload(const String& p) {
   String s = p;
   s.trim();
@@ -205,6 +247,85 @@ void parseCustomLockPayload(const String& p) {
 
   Serial.print("Custom lock payload NOT recognized: ");
   Serial.println(p);
+}
+
+void parseAuthEventPayload(const String& payload) {
+  String raw = payload;
+  raw.trim();
+
+  DynamicJsonDocument doc(384);
+  DeserializationError err = deserializeJson(doc, raw);
+
+  String event = "";
+  uint32_t expiresTs = 0;
+  uint32_t timeoutSec = 0;
+
+  if (!err) {
+    event = (const char*)(doc["event"] | "");
+    expiresTs = doc["expires_ts"] | 0;
+    timeoutSec = doc["timeout_sec"] | 0;
+  } else {
+    event = raw;
+    event.trim();
+    event.toLowerCase();
+  }
+
+  event.trim();
+  event.toLowerCase();
+
+  Serial.print("AUTH_EVENT -> ");
+  Serial.println(event);
+
+  if (event == "countdown_start") {
+    if (authCandidatePending) {
+      testAuthRunning = true;
+      testAuthStartMs = authCandidateStartMs;
+      Serial.println("TestAutenticazioneCompleta: START");
+    }
+
+    if (expiresTs > 0) {
+      startCountdownUntilEpoch(expiresTs);
+    } else if (timeoutSec > 0) {
+      startCountdownSeconds(timeoutSec);
+    } else {
+      startCountdownSeconds(10);
+    }
+    return;
+  }
+
+  if (event == "close_authorized") {
+    stopBackendCheck();
+    if (closeCandidatePending) {
+      testCloseRunning = true;
+      testCloseStartMs = closeCandidateStartMs;
+      Serial.println("TestChiusuraSerratura: START");
+
+      if (!serratura_aperta) {
+        uint32_t elapsed = (uint32_t)(millis() - testCloseStartMs);
+        printTestTime("TestChiusuraSerratura", elapsed);
+        testCloseRunning = false;
+        closeCandidatePending = false;
+      }
+    }
+    return;
+  }
+
+  if (event == "wrong_code") {
+    cancelPendingOperationState();
+    startWrongBanner();
+    return;
+  }
+
+  if (event == "disabled_user") {
+    cancelPendingOperationState();
+    startDisabledBanner();
+    return;
+  }
+
+  if (event == "cancel_wait") {
+    cancelPendingOperationState();
+    return;
+  }
 }
 
 #ifdef USE_SUMMER_TIME_DST
@@ -295,7 +416,13 @@ void messageReceived(String &topic, String &payload) {
     return;
   }
 
-  // fallback shadow (non usato per LCD/timing, ma lo lascio)
+  if (topic == TOPIC_AUTH_EVENT) {
+    Serial.print("RX custom auth_event: ");
+    Serial.println(payload);
+    parseAuthEventPayload(payload);
+    return;
+  }
+
   if (topic == TOPIC_GET_ACCEPTED || topic == TOPIC_UPDATE_ACCEPTED) {
     String s = payload;
     s.toLowerCase();
@@ -316,9 +443,8 @@ bool connectToMqtt(bool nonBlocking = false, uint8_t maxRetries = 10) {
 
       client.subscribe(TOPIC_GET_ACCEPTED);
       client.subscribe(TOPIC_UPDATE_ACCEPTED);
-
-      // fondamentale
       client.subscribe(TOPIC_LOCK_STATE);
+      client.subscribe(TOPIC_AUTH_EVENT);
 
       client.publish(TOPIC_GET, "{}", false, 0);
       lastShadowGetMs = millis();
@@ -376,7 +502,7 @@ void sendIRCodeRequest(const String& code) {
 
   req["src"]   = "ir";
   req["thing"] = THINGNAME;
-  req["fw"]    = "esit-esp8266-1.6-timing";
+  req["fw"]    = "esit-esp8266-db-2.0";
 
   String out;
   serializeJson(doc, out);
@@ -394,7 +520,6 @@ void sendIRCodeRequest(const String& code) {
 void updateLCDUi() {
   uint32_t ms = millis();
 
-  // 1) banner "CODICE ERRATO"
   if (bannerWrong && ms < bannerWrongUntilMs) {
     lcdWrite2("CODICE ERRATO", "");
     return;
@@ -402,7 +527,13 @@ void updateLCDUi() {
     bannerWrong = false;
   }
 
-  // 2) banner timeout
+  if (bannerDisabled && ms < bannerDisabledUntilMs) {
+    lcdWrite2("UTENTE DISABIL.", "ACCESSO NEGATO");
+    return;
+  } else {
+    bannerDisabled = false;
+  }
+
   if (bannerTimeout && ms < bannerTimeoutUntilMs) {
     lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
     return;
@@ -410,12 +541,10 @@ void updateLCDUi() {
     bannerTimeout = false;
   }
 
-  // 3) countdown
   if (countdownActive) {
     if (ms >= countdownEndMs) {
       countdownActive = false;
 
-      // se non è arrivata apertura -> timeout (e chiudo test autenticazione stampando tempo)
       if (!serratura_aperta) {
         startTimeoutBanner();
         if (testAuthRunning) {
@@ -423,6 +552,7 @@ void updateLCDUi() {
           printTestTime("TestAutenticazioneCompleta", elapsed, "(TIMEOUT)");
           testAuthRunning = false;
         }
+        authCandidatePending = false;
       }
 
       lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
@@ -430,9 +560,8 @@ void updateLCDUi() {
     }
 
     uint32_t remMs = countdownEndMs - ms;
-    int remS = (int)((remMs + 999) / 1000);
+    int remS = (int)((remMs + 999UL) / 1000UL);
     if (remS < 0) remS = 0;
-    if (remS > 10) remS = 10;
 
     if (remS != lastCountdownShown) {
       lastCountdownShown = remS;
@@ -441,14 +570,16 @@ void updateLCDUi() {
     return;
   }
 
-  // 4) MOSTRA CIFRE INSERITE (solo se buffer non vuoto)
+  if (backendCheckActive) {
+    lcdWrite2("VERIFICA CODICE", "ATTENDI...");
+    return;
+  }
+
   if (codeBuffer.length() > 0) {
-    // "CODICE: " (8 char) + max 8 cifre = 16
     lcdWrite2("CODICE: " + codeBuffer, "");
     return;
   }
 
-  // 5) stato serratura (default)
   if (serratura_aperta) {
     lcdWrite2("SERRATURA", "APERTA");
   } else {
@@ -461,9 +592,8 @@ void setup() {
   delay(1500);
   Serial.println();
 
-  // --- SERVO ---
   lockServo.attach(LOCK_PIN);
-  lockServo.write(SERVO_CLOSED_ANGLE); // stato iniziale coerente con serratura_aperta=false
+  lockServo.write(SERVO_CLOSED_ANGLE);
   delay(200);
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -504,7 +634,6 @@ void loop() {
     client.loop();
   }
 
-  // Shadow GET periodico (fallback/debug)
   if (client.connected()) {
     uint32_t ms = millis();
     if (ms - lastShadowGetMs >= SHADOW_GET_PERIOD_MS) {
@@ -513,37 +642,42 @@ void loop() {
     }
   }
 
-  // ---- COMPLETAMENTO TEST BASATO SU VARIABILE GLOBALE ----
   if (testAuthRunning && serratura_aperta) {
     uint32_t elapsed = (uint32_t)(millis() - testAuthStartMs);
     printTestTime("TestAutenticazioneCompleta", elapsed);
     testAuthRunning = false;
+    authCandidatePending = false;
   }
+
   if (testCloseRunning && !serratura_aperta) {
     uint32_t elapsed = (uint32_t)(millis() - testCloseStartMs);
     printTestTime("TestChiusuraSerratura", elapsed);
     testCloseRunning = false;
+    closeCandidatePending = false;
   }
 
-  // timeout di sicurezza
   if (testAuthRunning && (uint32_t)(millis() - testAuthStartMs) > TEST_AUTH_TIMEOUT_MS) {
     uint32_t elapsed = (uint32_t)(millis() - testAuthStartMs);
     printTestTime("TestAutenticazioneCompleta", elapsed, "(TIMEOUT)");
     testAuthRunning = false;
+    authCandidatePending = false;
   }
+
   if (testCloseRunning && (uint32_t)(millis() - testCloseStartMs) > TEST_CLOSE_TIMEOUT_MS) {
     uint32_t elapsed = (uint32_t)(millis() - testCloseStartMs);
     printTestTime("TestChiusuraSerratura", elapsed, "(TIMEOUT)");
     testCloseRunning = false;
+    closeCandidatePending = false;
   }
 
-  // IR input
   if (irrecv.decode(&results)) {
     uint16_t cmd = results.command;
     char k = decodeKeyFromIR(cmd);
 
     if (k) {
-      if (k >= '0' && k <= '9') {
+      if (backendCheckActive || countdownActive) {
+        Serial.println("Input ignored: operation already in progress.");
+      } else if (k >= '0' && k <= '9') {
         if (codeBuffer.length() < 8) codeBuffer += k;
         Serial.print("CODE: ");
         Serial.println(codeBuffer);
@@ -558,25 +692,17 @@ void loop() {
           Serial.print("OK pressed, sending code: ");
           Serial.println(entered);
 
-          if (entered != String(CODE_OK)) {
-            startWrongBanner();
+          if (!serratura_aperta) {
+            authCandidatePending = true;
+            authCandidateStartMs = millis();
+            testAuthRunning = false;
           } else {
-            // Se CHIUSA: avvia TestAutenticazioneCompleta + countdown
-            if (!serratura_aperta) {
-              testAuthRunning = true;
-              testAuthStartMs = millis();
-              Serial.println("TestAutenticazioneCompleta: START");
-              startCountdown10s();
-            }
-            // Se APERTA: avvia TestChiusuraSerratura (no countdown)
-            else {
-              testCloseRunning = true;
-              testCloseStartMs = millis();
-              Serial.println("TestChiusuraSerratura: START");
-            }
+            closeCandidatePending = true;
+            closeCandidateStartMs = millis();
+            testCloseRunning = false;
           }
 
-          // manda request al backend
+          startBackendCheck();
           sendIRCodeRequest(entered);
         }
       }

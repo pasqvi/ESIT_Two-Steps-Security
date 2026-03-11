@@ -1,15 +1,15 @@
 [
     {
-        "id": "e243a5906dab8ec4",
+        "id": "3f05bed5ca4ebe50",
         "type": "tab",
         "label": "ESIT Lock + AWS Shadow + Telegram",
         "disabled": false,
         "info": ""
     },
     {
-        "id": "82f38617694d67a3",
+        "id": "c1bece28cdb1caf9",
         "type": "inject",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "On start -> Shadow /get",
         "props": [
             {
@@ -31,14 +31,14 @@
         "y": 60,
         "wires": [
             [
-                "6abe6b132b3cd7e3"
+                "69d25ba3419c57c3"
             ]
         ]
     },
     {
-        "id": "6abe6b132b3cd7e3",
+        "id": "69d25ba3419c57c3",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Build GET payload {}",
         "func": "msg.payload = {};\nreturn msg;",
         "outputs": 1,
@@ -51,14 +51,14 @@
         "y": 60,
         "wires": [
             [
-                "71c707f03c4ac4c0"
+                "2676e2f6687fe7f1"
             ]
         ]
     },
     {
-        "id": "71c707f03c4ac4c0",
+        "id": "2676e2f6687fe7f1",
         "type": "mqtt out",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS Shadow GET",
         "topic": "$aws/things/esit-obj1/shadow/get",
         "qos": "0",
@@ -74,9 +74,9 @@
         "wires": []
     },
     {
-        "id": "649b1aa620928b1e",
+        "id": "6d206913a7847ba3",
         "type": "mqtt in",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS /get/accepted",
         "topic": "$aws/things/esit-obj1/shadow/get/accepted",
         "qos": "0",
@@ -90,14 +90,15 @@
         "y": 140,
         "wires": [
             [
-                "5c1e08c0a73baa9d"
+                "eae28ef5be6b1204",
+                "173d9b9361f4528e"
             ]
         ]
     },
     {
-        "id": "383ccbe0ae77b593",
+        "id": "54066a6221751a6d",
         "type": "mqtt in",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS /update/documents",
         "topic": "$aws/things/esit-obj1/shadow/update/documents",
         "qos": "0",
@@ -111,14 +112,15 @@
         "y": 260,
         "wires": [
             [
-                "5c1e08c0a73baa9d"
+                "eae28ef5be6b1204",
+                "173d9b9361f4528e"
             ]
         ]
     },
     {
-        "id": "5c1e08c0a73baa9d",
+        "id": "eae28ef5be6b1204",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Parse Shadow + cache lock + detect requests",
         "func": "let p = msg.payload;\nif (typeof p === 'string') {\n  try { p = JSON.parse(p); } catch(e) { return null; }\n}\n\nlet state = null;\nif (p && p.current && p.current.state) state = p.current.state;\nelse if (p && p.state) state = p.state;\nif (!state) return null;\n\nlet reported = state.reported || {};\nlet desired  = state.desired  || {};\n\nlet lock = (reported.lock || desired.lock || 'chiusa').toString();\nflow.set('lock', lock);\n\nif (!flow.get('initialized')) {\n  flow.set('initialized', true);\n  return [ null, { lockTarget: 'chiusa', reason: 'init', auth_event: { event: 'cancel_wait' } } ];\n}\n\nlet req = reported.request;\nif (req && req.nonce) {\n  if (req.nonce !== flow.get('lastReqNonce')) {\n    flow.set('lastReqNonce', req.nonce);\n    return [ { payload: req }, null ];\n  }\n}\n\nreturn null;",
         "outputs": 2,
@@ -131,18 +133,18 @@
         "y": 200,
         "wires": [
             [
-                "bff5b4e455e0be16"
+                "fc64e644d6de57bc"
             ],
             [
-                "f3e3bcebbe8f5c46",
-                "25cb9bcfeaa2dccc"
+                "6b87eedc73747616",
+                "e36280fdedb7f7f0"
             ]
         ]
     },
     {
-        "id": "bff5b4e455e0be16",
+        "id": "fc64e644d6de57bc",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare DB auth lookup by code",
         "func": "let req = msg.payload || {};\nlet code = (req.code || '').toString().trim();\nlet nonce = (req.nonce || '').toString();\nlet ts = Number(req.ts || 0);\nif (!code || !nonce) return null;\nif (!ts || Number.isNaN(ts)) ts = Math.floor(Date.now() / 1000);\n\nmsg.request = {\n  type: (req.type || 'toggle').toString(),\n  code,\n  nonce,\n  ts,\n  src: (req.src || 'ir').toString(),\n  thing: (req.thing || '').toString(),\n  fw: (req.fw || '').toString()\n};\n\nmsg.params = [code];\nreturn msg;",
         "outputs": 1,
@@ -154,14 +156,14 @@
         "y": 160,
         "wires": [
             [
-                "66cc48b4615a9c36"
+                "a52ec1da4bc0bcd2"
             ]
         ]
     },
     {
-        "id": "66cc48b4615a9c36",
+        "id": "a52ec1da4bc0bcd2",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Find user by access code",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti WHERE access_code = $1 LIMIT 1;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -172,14 +174,14 @@
         "y": 160,
         "wires": [
             [
-                "39c9f80e6a933e96"
+                "73ba5ac1da9e243e"
             ]
         ]
     },
     {
-        "id": "39c9f80e6a933e96",
+        "id": "73ba5ac1da9e243e",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Process auth result from DB",
         "func": "const req = msg.request || {};\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst lock = (flow.get('lock') || 'chiusa').toString();\n\nfunction cleanup(lockTarget, lastError) {\n  const out = { lockTarget: (lockTarget || lock), reason: 'cleanup' };\n  if (arguments.length >= 2) out.last_error = lastError;\n  return out;\n}\nfunction debug(reason, extra) {\n  return { payload: Object.assign({ reason, request: req }, extra || {}) };\n}\nfunction authEvent(evt) {\n  return { auth_event: evt };\n}\nfunction toUser(row) {\n  return {\n    id: row.id,\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nfunction toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nfunction getSecurityConfig() {\n  const raw = flow.get('securityConfig') || {};\n  return {\n    confirm_timeout_sec: Math.min(60, Math.max(5, toInt(raw.confirm_timeout_sec, 10))),\n    wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(raw.wrong_code_cooldown_sec, 0))),\n    max_wrong_attempts: Math.min(10, Math.max(1, toInt(raw.max_wrong_attempts, 3))),\n    lockout_duration_sec: Math.min(3600, Math.max(10, toInt(raw.lockout_duration_sec, 60))),\n    telegram_confirm_required: toBool(raw.telegram_confirm_required, true)\n  };\n}\nfunction clearPending() {\n  const t = flow.get('pendingTimer');\n  if (t) clearTimeout(t);\n  flow.set('pendingTimer', null);\n  flow.set('pending', null);\n}\nfunction resetAbuseState() {\n  flow.set('wrongAttemptsCount', 0);\n  flow.set('wrongCodeCooldownUntil', 0);\n  flow.set('lockoutUntil', 0);\n}\n\nconst cfg = getSecurityConfig();\nconst nowMs = Date.now();\nconst user = rows.length > 0 ? toUser(rows[0]) : null;\nconst pending = flow.get('pending');\n\nconst lockoutUntil = Number(flow.get('lockoutUntil') || 0);\nif (lockoutUntil > nowMs) {\n  const retryAfterSec = Math.max(1, Math.ceil((lockoutUntil - nowMs) / 1000));\n  return [\n    null,\n    cleanup(lock, {\n      type: 'lockout_active',\n      msg: 'Sistema temporaneamente bloccato per troppi errori',\n      retry_after_sec: retryAfterSec,\n      ts: Math.floor(nowMs / 1000)\n    }),\n    debug('lockout_active', { retry_after_sec: retryAfterSec, config: cfg }),\n    null\n  ];\n}\n\nconst wrongCodeCooldownUntil = Number(flow.get('wrongCodeCooldownUntil') || 0);\nif (wrongCodeCooldownUntil > nowMs) {\n  const retryAfterSec = Math.max(1, Math.ceil((wrongCodeCooldownUntil - nowMs) / 1000));\n  return [\n    null,\n    cleanup(lock, {\n      type: 'wrong_code_cooldown_active',\n      msg: 'Attendi prima di effettuare un nuovo tentativo',\n      retry_after_sec: retryAfterSec,\n      ts: Math.floor(nowMs / 1000)\n    }),\n    debug('wrong_code_cooldown_active', { retry_after_sec: retryAfterSec, config: cfg }),\n    null\n  ];\n}\n\nif (pending && pending.nonce && nowMs < pending.expires) {\n  if (user && user.status === 'ABILITATO' && user.telegram_id) {\n    return [\n      {\n        payload: {\n          chatId: user.telegram_id,\n          type: 'message',\n          content: 'Richiesta già in corso: attendi il completamento dell\\'operazione attuale.'\n        }\n      },\n      cleanup(lock, null),\n      debug('busy', { user, config: cfg }),\n      null\n    ];\n  }\n  return [null, cleanup(lock, null), debug('busy', { config: cfg }), null];\n}\n\nif (!user) {\n  let wrongAttempts = Number(flow.get('wrongAttemptsCount') || 0) + 1;\n  flow.set('wrongAttemptsCount', wrongAttempts);\n\n  if (wrongAttempts >= cfg.max_wrong_attempts) {\n    const until = nowMs + (cfg.lockout_duration_sec * 1000);\n    flow.set('wrongAttemptsCount', 0);\n    flow.set('wrongCodeCooldownUntil', 0);\n    flow.set('lockoutUntil', until);\n\n    return [\n      null,\n      cleanup(lock, {\n        type: 'lockout_started',\n        msg: 'Troppi codici errati: sistema temporaneamente bloccato',\n        retry_after_sec: cfg.lockout_duration_sec,\n        attempts_limit: cfg.max_wrong_attempts,\n        ts: Math.floor(nowMs / 1000)\n      }),\n      debug('lockout_started', {\n        attempts_limit: cfg.max_wrong_attempts,\n        lockout_duration_sec: cfg.lockout_duration_sec,\n        config: cfg\n      }),\n      authEvent({ event: 'wrong_code' })\n    ];\n  }\n\n  if (cfg.wrong_code_cooldown_sec > 0) {\n    flow.set('wrongCodeCooldownUntil', nowMs + (cfg.wrong_code_cooldown_sec * 1000));\n  } else {\n    flow.set('wrongCodeCooldownUntil', 0);\n  }\n\n  return [\n    null,\n    cleanup(lock, {\n      type: 'wrong_code',\n      msg: 'Codice non valido',\n      nonce: req.nonce,\n      ts: req.ts,\n      attempts_count: wrongAttempts,\n      attempts_remaining: Math.max(0, cfg.max_wrong_attempts - wrongAttempts)\n    }),\n    debug('wrong_code', {\n      attempts_count: wrongAttempts,\n      attempts_remaining: Math.max(0, cfg.max_wrong_attempts - wrongAttempts),\n      config: cfg\n    }),\n    authEvent({ event: 'wrong_code' })\n  ];\n}\n\nif (user.status !== 'ABILITATO') {\n  return [\n    null,\n    cleanup(lock, {\n      type: 'disabled_user',\n      msg: 'Utente disabilitato',\n      nonce: req.nonce,\n      ts: req.ts,\n      username: user.username\n    }),\n    debug('disabled_user', { user, config: cfg }),\n    authEvent({ event: 'disabled_user' })\n  ];\n}\n\nflow.set('wrongAttemptsCount', 0);\nflow.set('wrongCodeCooldownUntil', 0);\nflow.set('lockoutUntil', 0);\n\nif (lock === 'chiusa') {\n  if (!cfg.telegram_confirm_required) {\n    clearPending();\n    return [\n      {\n        payload: {\n          chatId: user.telegram_id,\n          type: 'message',\n          content: 'Codice corretto: serratura APERTA.'\n        }\n      },\n      { lockTarget: 'aperta', reason: 'open_direct', last_error: null },\n      debug('open_direct', { user, config: cfg }),\n      authEvent({\n        event: 'open_authorized',\n        username: user.username,\n        src: (req.src || '').toString(),\n        mode: 'direct'\n      })\n    ];\n  }\n\n  const confirmTimeoutMs = cfg.confirm_timeout_sec * 1000;\n  const expires = nowMs + confirmTimeoutMs;\n\n  flow.set('pending', {\n    nonce: req.nonce,\n    expires,\n    user,\n    code: req.code\n  });\n\n  const oldTimer = flow.get('pendingTimer');\n  if (oldTimer) {\n    clearTimeout(oldTimer);\n    flow.set('pendingTimer', null);\n  }\n\n  const timer = setTimeout(() => {\n    const p = flow.get('pending');\n    if (p && p.nonce === req.nonce && Date.now() >= p.expires) {\n      flow.set('pending', null);\n      const t = flow.get('pendingTimer');\n      if (t) clearTimeout(t);\n      flow.set('pendingTimer', null);\n\n      node.send([\n        {\n          payload: {\n            chatId: user.telegram_id,\n            type: 'message',\n            content: 'Tempo scaduto: serratura NON aperta.'\n          }\n        },\n        null,\n        debug('timeout', { user, config: cfg }),\n        authEvent({\n          event: 'confirm_timeout',\n          username: user.username,\n          src: 'telegram',\n          nonce: req.nonce,\n          timeout_sec: cfg.confirm_timeout_sec\n        })\n      ]);\n    }\n  }, confirmTimeoutMs);\n\n  flow.set('pendingTimer', timer);\n\n  return [\n    {\n      _nonce: req.nonce,\n      payload: {\n        chatId: user.telegram_id,\n        type: 'message',\n        content: 'Codice corretto. Premi CONFERMA entro ' + cfg.confirm_timeout_sec + ' secondi per APRIRE.',\n        options: {\n          reply_markup: JSON.stringify({\n            inline_keyboard: [\n              [{ text: 'CONFERMA', callback_data: 'CONFIRM|' + req.nonce }]\n            ]\n          })\n        }\n      }\n    },\n    cleanup(lock, null),\n    debug('countdown_start', { user, config: cfg }),\n    authEvent({\n      event: 'countdown_start',\n      nonce: req.nonce,\n      expires_ts: Math.floor(expires / 1000),\n      username: user.username,\n      src: 'telegram',\n      timeout_sec: cfg.confirm_timeout_sec\n    })\n  ];\n}\n\nreturn [\n  {\n    payload: {\n      chatId: user.telegram_id,\n      type: 'message',\n      content: 'Codice corretto: chiusura automatica in corso.'\n    }\n  },\n  { lockTarget: 'chiusa', reason: 'close', last_error: null },\n  debug('close', { user, config: cfg }),\n  authEvent({\n    event: 'close_authorized',\n    username: user.username,\n    src: (req.src || '').toString()\n  })\n];",
         "outputs": 4,
@@ -192,23 +194,24 @@
         "y": 160,
         "wires": [
             [
-                "2a12582efb753e5a"
+                "0b27c828f570fb50"
             ],
             [
-                "f3e3bcebbe8f5c46"
+                "6b87eedc73747616",
+                "2e379220c84f2249"
             ],
             [
-                "f1e3f76792b22b10"
+                "f2bb2baea2e670aa"
             ],
             [
-                "25cb9bcfeaa2dccc"
+                "e36280fdedb7f7f0"
             ]
         ]
     },
     {
-        "id": "2a12582efb753e5a",
+        "id": "0b27c828f570fb50",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "MARK t0 (Telegram link) + extract nonce",
         "func": "const p = msg.payload || {};\nconst opts = p.options || {};\nconst rm = (opts.reply_markup || '').toString();\n\nif (!rm) return msg;\n\nlet nonce = msg._nonce;\nif (!nonce) {\n  const m = rm.match(/CONFIRM\\|([^\"\\s}]+)/);\n  if (m && m[1]) nonce = m[1];\n}\nif (!nonce) return msg;\n\nmsg._metric = 'telegram_link_send';\nmsg._nonce = nonce;\nmsg._t0_ms = Date.now();\nreturn msg;",
         "outputs": 1,
@@ -220,14 +223,14 @@
         "y": 120,
         "wires": [
             [
-                "0629411b0edde679"
+                "d462aaa3e09ddfd8"
             ]
         ]
     },
     {
-        "id": "f3e3bcebbe8f5c46",
+        "id": "6b87eedc73747616",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Build Shadow UPDATE (desired+reported lock + cleanup)",
         "func": "let lockTarget = (msg.lockTarget || flow.get('lock') || 'chiusa').toString();\n\nmsg.payload = {\n  state: {\n    desired: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget\n    },\n    reported: {\n      welcome: 'ESIT aws-iot',\n      lock: lockTarget,\n      value: null,\n      pending: null,\n      reqid: null,\n      req_ts: null,\n      op: null,\n      op_ts: null,\n      action: null,\n      request: null\n    }\n  }\n};\n\nif (Object.prototype.hasOwnProperty.call(msg, 'last_error')) {\n  msg.payload.state.reported.last_error = msg.last_error;\n}\n\nflow.set('lock', lockTarget);\nreturn msg;",
         "outputs": 1,
@@ -239,16 +242,16 @@
         "y": 300,
         "wires": [
             [
-                "c31fe5f4d5ac9e5a",
-                "c751f7002ca30733",
-                "891fc0db2ad9fa71"
+                "d1a0a446c0e4931c",
+                "b1f01a46a231056a",
+                "916093c8d10555d4"
             ]
         ]
     },
     {
-        "id": "891fc0db2ad9fa71",
+        "id": "916093c8d10555d4",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Publish custom lock_state to ESP",
         "func": "let lockTarget = (msg.lockTarget || (msg.payload && msg.payload.state && msg.payload.state.reported && msg.payload.state.reported.lock) || flow.get('lock') || 'chiusa').toString();\nmsg.topic = '$aws/things/esit-obj1/custom/lock_state';\nmsg.payload = lockTarget;\nreturn msg;",
         "outputs": 1,
@@ -260,15 +263,15 @@
         "y": 380,
         "wires": [
             [
-                "a7c913b30ccdcddb",
-                "c5ed931f9cbaf257"
+                "e9dbf85a8cbca112",
+                "64793fb44c0207c1"
             ]
         ]
     },
     {
-        "id": "a7c913b30ccdcddb",
+        "id": "e9dbf85a8cbca112",
         "type": "mqtt out",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS Custom lock_state OUT",
         "topic": "",
         "qos": "0",
@@ -284,9 +287,9 @@
         "wires": []
     },
     {
-        "id": "c5ed931f9cbaf257",
+        "id": "64793fb44c0207c1",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG custom lock_state",
         "active": true,
         "tosidebar": true,
@@ -299,9 +302,9 @@
         "wires": []
     },
     {
-        "id": "c31fe5f4d5ac9e5a",
+        "id": "d1a0a446c0e4931c",
         "type": "mqtt out",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS Shadow UPDATE",
         "topic": "$aws/things/esit-obj1/shadow/update",
         "qos": "0",
@@ -317,12 +320,13 @@
         "wires": []
     },
     {
-        "id": "25cb9bcfeaa2dccc",
+        "id": "e36280fdedb7f7f0",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Build auth_event payload to ESP",
         "func": "if (!msg.auth_event) return null;\nmsg.topic = '$aws/things/esit-obj1/custom/auth_event';\nmsg.payload = JSON.stringify(msg.auth_event);\nreturn msg;",
         "outputs": 1,
+        "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
@@ -331,15 +335,15 @@
         "y": 460,
         "wires": [
             [
-                "2c4da94502f839a7",
-                "f2a3b4c5d6e70718"
+                "3f353f63a32e8130",
+                "f2fa20a05915ddfd"
             ]
         ]
     },
     {
-        "id": "2c4da94502f839a7",
+        "id": "3f353f63a32e8130",
         "type": "mqtt out",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "AWS Custom auth_event OUT",
         "topic": "",
         "qos": "0",
@@ -355,9 +359,9 @@
         "wires": []
     },
     {
-        "id": "7b6a6d8cf45691d7",
+        "id": "8a0bd7d83d247cde",
         "type": "telegram event",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Telegram Event (callback_query)",
         "bot": "00af2f8b6f9b79d7",
         "event": "callback_query",
@@ -366,14 +370,14 @@
         "y": 520,
         "wires": [
             [
-                "d8b8c348a7dd92ae"
+                "96e29f2d371cacd2"
             ]
         ]
     },
     {
-        "id": "d8b8c348a7dd92ae",
+        "id": "96e29f2d371cacd2",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Handle callback CONFIRM|nonce (<=10s)",
         "func": "let pending = flow.get('pending');\n\nlet data = (msg.payload && msg.payload.content) ? msg.payload.content : null;\nif (data && typeof data === 'object') data = data.data || data.content || null;\nif (!data && msg.originalMessage && msg.originalMessage.callback_query && msg.originalMessage.callback_query.data) {\n  data = msg.originalMessage.callback_query.data;\n}\nif (!data || typeof data !== 'string' || !data.startsWith('CONFIRM|')) return null;\n\nlet nonce = data.split('|')[1] || '';\nlet fromId = null;\nif (msg.originalMessage && msg.originalMessage.callback_query && msg.originalMessage.callback_query.from) {\n  fromId = Number(msg.originalMessage.callback_query.from.id);\n}\n\nif (!pending || !pending.nonce || !pending.user) {\n  return [null, { payload: { chatId: fromId, type: 'message', content: 'Nessuna richiesta in corso.' } }];\n}\n\nif (nonce !== pending.nonce) {\n  return [null, { payload: { chatId: fromId || pending.user.telegram_id, type: 'message', content: 'Conferma non valida (nonce mismatch).' } }];\n}\n\nif (fromId && Number(pending.user.telegram_id) !== fromId) {\n  return [null, { payload: { chatId: fromId, type: 'message', content: 'Conferma non autorizzata per questo utente.' } }];\n}\n\nif (Date.now() > pending.expires) {\n  flow.set('pending', null);\n  let t = flow.get('pendingTimer');\n  if (t) clearTimeout(t);\n  flow.set('pendingTimer', null);\n\n  return [null, { payload: { chatId: pending.user.telegram_id, type: 'message', content: 'Tempo scaduto: serratura NON aperta.' } }];\n}\n\nconst openedBy = pending.user;\n\nflow.set('pending', null);\nlet t = flow.get('pendingTimer');\nif (t) clearTimeout(t);\nflow.set('pendingTimer', null);\n\nreturn [\n  {\n    lockTarget: 'aperta',\n    reason: 'open',\n    last_error: null,\n    auth_event: {\n      event: 'open_authorized',\n      username: (openedBy.username || '').toString(),\n      src: 'telegram',\n      nonce: nonce\n    }\n  },\n  {\n    payload: {\n      chatId: openedBy.telegram_id,\n      type: 'message',\n      content: 'Conferma ricevuta: serratura APERTA.'\n    }\n  }\n];",
         "outputs": 2,
@@ -386,18 +390,18 @@
         "y": 520,
         "wires": [
             [
-                "f3e3bcebbe8f5c46",
-                "25cb9bcfeaa2dccc"
+                "6b87eedc73747616",
+                "e36280fdedb7f7f0"
             ],
             [
-                "0629411b0edde679"
+                "d462aaa3e09ddfd8"
             ]
         ]
     },
     {
-        "id": "0629411b0edde679",
+        "id": "d462aaa3e09ddfd8",
         "type": "telegram sender",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Telegram Sender",
         "bot": "00af2f8b6f9b79d7",
         "haserroroutput": true,
@@ -406,18 +410,18 @@
         "y": 160,
         "wires": [
             [
-                "0db05c5442b8734a",
-                "91af80fe5a682f94"
+                "f914f9eddbf3487c",
+                "0cddc7e64ec479ff"
             ],
             [
-                "8775f38282c28ef1"
+                "8a6462ddc748df68"
             ]
         ]
     },
     {
-        "id": "91af80fe5a682f94",
+        "id": "0cddc7e64ec479ff",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "CALC latency + DEBUG (Telegram link)",
         "func": "if (msg._metric !== 'telegram_link_send' || !msg._t0_ms || !msg._nonce) return null;\nconst t1 = Date.now();\nmsg.payload = {\n  metric: 'telegram_link_send_latency_ms',\n  nonce: msg._nonce,\n  latency_ms: t1 - Number(msg._t0_ms),\n  t0_ms: msg._t0_ms,\n  t1_ms: t1\n};\nreturn msg;",
         "outputs": 1,
@@ -429,14 +433,14 @@
         "y": 120,
         "wires": [
             [
-                "d2465db8a6492eaf"
+                "086e7208abde526a"
             ]
         ]
     },
     {
-        "id": "d2465db8a6492eaf",
+        "id": "086e7208abde526a",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG Telegram link latency",
         "active": true,
         "tosidebar": true,
@@ -449,9 +453,9 @@
         "wires": []
     },
     {
-        "id": "f1e3f76792b22b10",
+        "id": "f2bb2baea2e670aa",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG req/other",
         "active": true,
         "tosidebar": true,
@@ -466,9 +470,9 @@
         "wires": []
     },
     {
-        "id": "c751f7002ca30733",
+        "id": "b1f01a46a231056a",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG AWS update out",
         "active": true,
         "tosidebar": true,
@@ -483,9 +487,9 @@
         "wires": []
     },
     {
-        "id": "0db05c5442b8734a",
+        "id": "f914f9eddbf3487c",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG Telegram ok",
         "active": true,
         "tosidebar": true,
@@ -498,9 +502,9 @@
         "wires": []
     },
     {
-        "id": "8775f38282c28ef1",
+        "id": "8a6462ddc748df68",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG Telegram errors",
         "active": true,
         "tosidebar": true,
@@ -513,9 +517,9 @@
         "wires": []
     },
     {
-        "id": "6ce7183d4c797698",
+        "id": "cd77b4e3afea4089",
         "type": "ui_ui_control",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Admin UI Control",
         "events": "all",
         "x": 710,
@@ -525,9 +529,9 @@
         ]
     },
     {
-        "id": "5171e4b33806d459",
+        "id": "aa2eb7bd1b1f04fd",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "68d71479ee39c666",
         "name": "Admin Login Page",
         "order": 1,
@@ -543,20 +547,20 @@
         "y": 660,
         "wires": [
             [
-                "6ce7183d4c797698"
+                "cd77b4e3afea4089"
             ]
         ]
     },
     {
-        "id": "2ca5aaad3dc5e1c4",
+        "id": "8f5d954f685d89ba",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "c327610ce4e26e28",
         "name": "Admin Dashboard Page",
         "order": 1,
         "width": "24",
         "height": "24",
-        "format": "<div id=\"esit-dash-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-dash-{{$id}}{min-height:1100px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-dash-{{$id}} *{box-sizing:border-box}\n#esit-dash-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-dash-{{$id}} .guard .card,#esit-dash-{{$id}} .dash .card{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-dash-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-dash-{{$id}} .guard .card h2{\nmargin:0;\ncolor:#C9A227 !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .title{\nmargin:0;\ncolor:#fff !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .guard .card p{\ncolor:#ffffff !important;\nbackground:transparent !important;\nfont-size:16px !important;\nline-height:1.2 !important;\nmargin-top:10px !important;\nmargin-bottom:15px !important;\n}\n#esit-dash-{{$id}} .dash{display:none;max-width:1400px;margin:0 auto}\n#esit-dash-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}\n#esit-dash-{{$id}} .subtitle{margin-top:6px;color:#94a3b8}\n#esit-dash-{{$id}} .logout{background:#ef4444;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-dash-{{$id}} .section{margin:26px 0 12px 0;font-size:19px;font-weight:700;color:#fff}\n#esit-dash-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-dash-{{$id}} .card{padding:18px;min-height:185px;display:flex;flex-direction:column;justify-content:space-between}\n#esit-dash-{{$id}} .pill{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;background:rgba(37,99,235,.16);border:1px solid rgba(96,165,250,.35);color:#bfdbfe;font-size:11px;font-weight:700}\n#esit-dash-{{$id}} h3{margin:10px 0 8px 0;color:#C9A227 !important;font-size:17px; background: transparent !important}\n#esit-dash-{{$id}} p{margin:0;color:#fff !important;font-size:13px;line-height:1.6; background: transparent !important}\n#esit-dash-{{$id}} .btn{width:100%;padding:12px 16px;border:none;border-radius:12px;background:#1e293b;color:#e2e8f0;font-weight:700;cursor:pointer; margin-top: 10px}\n#esit-dash-{{$id}} .note{margin-top:22px;padding:16px 18px;border-radius:16px;border:1px solid #334155;background:rgba(30,41,59,.92);text-align:center;color:#94a3b8}\n</style>\n<div id=\"esit-dash-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n<div id=\"esit-dash-view-{{$id}}\" class=\"dash\">\n  <div class=\"topbar\">\n    <div>\n      <h1 class=\"title\">Dashboard Amministratore</h1>\n      <div class=\"subtitle\">Two-Steps Security</div>\n    </div>\n    <button id=\"esit-logout-btn-{{$id}}\" class=\"logout\">Logout</button>\n  </div>\n\n  <div class=\"section\">Gestione utenti</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">1</div><h3>Visualizzazione utenti</h3><p>Elenco utenti registrati nel sistema con stato e informazioni principali.</p></div><button id=\"esit-view-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">2</div><h3>Aggiunta utente</h3><p>Aggiungi nuovi utenti che potranno accedere al sistema.</p></div><button id=\"esit-add-user-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">3</div><h3>Modifica utente</h3><p>Aggiornamento dei dati dell'utente.</p></div><button id=\"esit-edit-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">4</div><h3>Disabilitazione utente</h3><p>Disabilitazione temporanea del profilo utente.</p></div><button id=\"esit-disable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">5</div><h3>Riabilitazione utente</h3><p>Riattivazione di un profilo precedentemente disabilitato.</p></div><button id=\"esit-enable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">6</div><h3>Eliminazione utente</h3><p>Rimozione del profilo utente dal sistema.</p></div><button id=\"esit-delete-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n  </div>\n\n  <div class=\"section\">Monitoraggio e sicurezza</div>\n  <div class=\"grid\">\n    <div class=\"card\">\n      <div>\n        <div class=\"pill\">7</div>\n        <h3>Monitoraggio attività utenti</h3>\n        <p>Storico eventi con filtri per data e username.</p>\n      </div><button id=\"esit-activity-log-btn-{{$id}}\" class=\"btn\">Vai</button>\n      </div>\n<div class=\"card\">\n  <div>\n    <div class=\"pill\">8</div>\n    <h3>Configurazione parametri di sicurezza</h3>\n    <p>Gestione countdown, impostazioni e parametri di sicurezza.</p>\n  </div><button id=\"esit-security-config-btn-{{$id}}\" class=\"btn\">Vai</button>\n</div>  </div>\n\n  <div class=\"section\">Comandi serratura</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">9</div><h3>Apertura serratura Admin</h3><p>Comando remoto di apertura della serratura via dashboard.</p></div><button id=\"esit-open-btn-{{$id}}\" class=\"btn\">Apri</button></div>\n    <div class=\"card\"><div><div class=\"pill\">10</div><h3>Chiusura serratura Admin</h3><p>Comando remoto di chiusura della serratura via dashboard.</p></div><button id=\"esit-close-btn-{{$id}}\" class=\"btn\">Chiudi</button></div>\n  </div>\n\n  <div class=\"note\">Developed by <strong>Gruppo 1</strong></div>\n</div>\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-dash-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-dash-guard-\"+scope.$id);\n    var dash=document.getElementById(\"esit-dash-view-\"+scope.$id);\n    var logoutBtn=document.getElementById(\"esit-logout-btn-\"+scope.$id);\n    var addBtn=document.getElementById(\"esit-add-user-btn-\"+scope.$id);\n    var viewBtn=document.getElementById(\"esit-view-users-btn-\"+scope.$id);\n    var editBtn=document.getElementById(\"esit-edit-users-btn-\"+scope.$id);\n    var disableBtn=document.getElementById(\"esit-disable-users-btn-\"+scope.$id);\n    var enableBtn=document.getElementById(\"esit-enable-users-btn-\"+scope.$id);\n    var deleteBtn=document.getElementById(\"esit-delete-users-btn-\"+scope.$id);\n    var securityBtn=document.getElementById(\"esit-security-config-btn-\"+scope.$id);\n    var activityBtn=document.getElementById(\"esit-activity-log-btn-\"+scope.$id);\n    var openBtn=document.getElementById(\"esit-open-btn-\"+scope.$id);\n    var closeBtn=document.getElementById(\"esit-close-btn-\"+scope.$id);\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      dash.style.display=logged?\"block\":\"none\";\n      if(!logged) setTimeout(goLogin,3000);\n    }\n    logoutBtn.addEventListener(\"click\",function(){ window.sessionStorage.removeItem(AUTH_KEY); goLogin(); });\n    addBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Aggiunta Utente\"}}); });\n    viewBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Visualizzazione Utenti\"},page_action:\"view_users_load\"}); });\n    editBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Modifica Utenti\"},page_action:\"edit_users_load\"}); });\n    disableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Disabilitazione Utente\"},page_action:\"disable_users_load\"}); });\n    enableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Riabilitazione Utente\"},page_action:\"enable_users_load\"}); });\n    deleteBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Eliminazione Utente\"},page_action:\"delete_users_load\"}); });\n    securityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Configurazione Sicurezza\"}}); });\n    activityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Monitoraggio Attività Utenti\"}}); });\n    openBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"open_lock\"}); });\n    closeBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"close_lock\"}); });\n    render();\n  }\n  init();\n})(scope);\n</script>\n</div>",
+        "format": "<div id=\"esit-dash-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-dash-{{$id}}{min-height:1100px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-dash-{{$id}} *{box-sizing:border-box}\n#esit-dash-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-dash-{{$id}} .guard .card,#esit-dash-{{$id}} .dash .card{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-dash-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-dash-{{$id}} .guard .card h2{\nmargin:0;\ncolor:#C9A227 !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .title{\nmargin:0;\ncolor:#fff !important;\nbackground:transparent !important;\n}\n\n#esit-dash-{{$id}} .guard .card p{\ncolor:#ffffff !important;\nbackground:transparent !important;\nfont-size:16px !important;\nline-height:1.2 !important;\nmargin-top:10px !important;\nmargin-bottom:15px !important;\n}\n#esit-dash-{{$id}} .dash{display:none;max-width:1400px;margin:0 auto}\n#esit-dash-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}\n#esit-dash-{{$id}} .subtitle{margin-top:6px;color:#94a3b8}\n#esit-dash-{{$id}} .logout{background:#ef4444;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-dash-{{$id}} .section{margin:26px 0 12px 0;font-size:19px;font-weight:700;color:#fff}\n#esit-dash-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-dash-{{$id}} .card{padding:18px;min-height:185px;display:flex;flex-direction:column;justify-content:space-between}\n#esit-dash-{{$id}} .pill{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;background:rgba(37,99,235,.16);border:1px solid rgba(96,165,250,.35);color:#bfdbfe;font-size:11px;font-weight:700}\n#esit-dash-{{$id}} h3{margin:10px 0 8px 0;color:#C9A227 !important;font-size:17px; background: transparent !important}\n#esit-dash-{{$id}} p{margin:0;color:#fff !important;font-size:13px;line-height:1.6; background: transparent !important}\n#esit-dash-{{$id}} .btn{width:100%;padding:12px 16px;border:none;border-radius:12px;background:#1e293b;color:#e2e8f0;font-weight:700;cursor:pointer; margin-top: 10px}\n#esit-dash-{{$id}} .lock-banner{\ndisplay:block;\nmargin-top:22px;\npadding:12px 14px;\nborder-radius:12px;\nborder:1px solid #334155;\ntext-align:center;\nfont-weight:700;\nfont-size:15px;\n}\n#esit-dash-{{$id}} .lock-banner.open{\nbackground:rgba(20,83,45,.45);\nborder-color:rgba(34,197,94,.45);\ncolor:#bbf7d0;\n}\n#esit-dash-{{$id}} .lock-banner.closed{\nbackground:rgba(127,29,29,.55);\nborder-color:rgba(220,38,38,.5);\ncolor:#fecaca;\n}\n</style>\n<div id=\"esit-dash-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n<div id=\"esit-dash-view-{{$id}}\" class=\"dash\">\n  <div class=\"topbar\">\n    <div>\n      <h1 class=\"title\">Dashboard Amministratore</h1>\n      <div class=\"subtitle\">Two-Steps Security</div>\n    </div>\n    <button id=\"esit-logout-btn-{{$id}}\" class=\"logout\">Logout</button>\n  </div>\n\n  <div class=\"section\">Gestione utenti</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">1</div><h3>Visualizzazione utenti</h3><p>Elenco utenti registrati nel sistema con stato e informazioni principali.</p></div><button id=\"esit-view-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">2</div><h3>Aggiunta utente</h3><p>Aggiungi nuovi utenti che potranno accedere al sistema.</p></div><button id=\"esit-add-user-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">3</div><h3>Modifica utente</h3><p>Aggiornamento dei dati dell'utente.</p></div><button id=\"esit-edit-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">4</div><h3>Disabilitazione utente</h3><p>Disabilitazione temporanea del profilo utente.</p></div><button id=\"esit-disable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">5</div><h3>Riabilitazione utente</h3><p>Riattivazione di un profilo precedentemente disabilitato.</p></div><button id=\"esit-enable-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n    <div class=\"card\"><div><div class=\"pill\">6</div><h3>Eliminazione utente</h3><p>Rimozione del profilo utente dal sistema.</p></div><button id=\"esit-delete-users-btn-{{$id}}\" class=\"btn\">Vai</button></div>\n  </div>\n\n  <div class=\"section\">Monitoraggio e sicurezza</div>\n  <div class=\"grid\">\n    <div class=\"card\">\n      <div>\n        <div class=\"pill\">7</div>\n        <h3>Monitoraggio attività utenti</h3>\n        <p>Storico eventi con filtri per data e username.</p>\n      </div><button id=\"esit-activity-log-btn-{{$id}}\" class=\"btn\">Vai</button>\n      </div>\n<div class=\"card\">\n  <div>\n    <div class=\"pill\">8</div>\n    <h3>Configurazione parametri di sicurezza</h3>\n    <p>Gestione countdown, impostazioni e parametri di sicurezza.</p>\n  </div><button id=\"esit-security-config-btn-{{$id}}\" class=\"btn\">Vai</button>\n</div>  </div>\n\n  <div class=\"section\">Comandi serratura</div>\n  <div class=\"grid\">\n    <div class=\"card\"><div><div class=\"pill\">9</div><h3>Apertura serratura Admin</h3><p>Comando remoto di apertura della serratura via dashboard.</p></div><button id=\"esit-open-btn-{{$id}}\" class=\"btn\">Apri</button></div>\n    <div class=\"card\"><div><div class=\"pill\">10</div><h3>Chiusura serratura Admin</h3><p>Comando remoto di chiusura della serratura via dashboard.</p></div><button id=\"esit-close-btn-{{$id}}\" class=\"btn\">Chiudi</button></div>\n  </div>\n\n  <div id=\"esit-lock-banner-{{$id}}\" class=\"lock-banner closed\">Stato serratura: CHIUSA</div>\n</div>\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-dash-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-dash-guard-\"+scope.$id);\n    var dash=document.getElementById(\"esit-dash-view-\"+scope.$id);\n    var logoutBtn=document.getElementById(\"esit-logout-btn-\"+scope.$id);\n    var addBtn=document.getElementById(\"esit-add-user-btn-\"+scope.$id);\n    var viewBtn=document.getElementById(\"esit-view-users-btn-\"+scope.$id);\n    var editBtn=document.getElementById(\"esit-edit-users-btn-\"+scope.$id);\n    var disableBtn=document.getElementById(\"esit-disable-users-btn-\"+scope.$id);\n    var enableBtn=document.getElementById(\"esit-enable-users-btn-\"+scope.$id);\n    var deleteBtn=document.getElementById(\"esit-delete-users-btn-\"+scope.$id);\n    var securityBtn=document.getElementById(\"esit-security-config-btn-\"+scope.$id);\n    var activityBtn=document.getElementById(\"esit-activity-log-btn-\"+scope.$id);\n    var openBtn=document.getElementById(\"esit-open-btn-\"+scope.$id);\n    var closeBtn=document.getElementById(\"esit-close-btn-\"+scope.$id);\n    var lockBanner=document.getElementById(\"esit-lock-banner-\"+scope.$id);\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function setLockBanner(lock){\n    lock=(lock||\"chiusa\").toString().trim().toLowerCase();\n    if(lock!==\"aperta\" && lock!==\"chiusa\") lock=\"chiusa\";\n    \n    lockBanner.textContent=\"Stato serratura: \" + lock.toUpperCase();\n    lockBanner.classList.remove(\"open\",\"closed\");\n    lockBanner.classList.add(lock===\"aperta\" ? \"open\" : \"closed\");\n    }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      dash.style.display=logged?\"block\":\"none\";\n      if(!logged) setTimeout(goLogin,3000);\n    }\n    logoutBtn.addEventListener(\"click\",function(){ window.sessionStorage.removeItem(AUTH_KEY); goLogin(); });\n    addBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Aggiunta Utente\"}}); });\n    viewBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Visualizzazione Utenti\"},page_action:\"view_users_load\"}); });\n    editBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Modifica Utenti\"},page_action:\"edit_users_load\"}); });\n    disableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Disabilitazione Utente\"},page_action:\"disable_users_load\"}); });\n    enableBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Riabilitazione Utente\"},page_action:\"enable_users_load\"}); });\n    deleteBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Eliminazione Utente\"},page_action:\"delete_users_load\"}); });\n    securityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Configurazione Sicurezza\"}}); });\n    activityBtn.addEventListener(\"click\",function(){ scope.send({payload:{tab:\"Monitoraggio Attività Utenti\"}}); });\n    openBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"open_lock\"}); });\n    closeBtn.addEventListener(\"click\",function(){ scope.send({admin_action:\"close_lock\"}); });\n    scope.$watch(\"msg\", function(msg){\n    if(!msg || !msg.payload) return;\n    \n    var p=msg.payload;\n    var lock=null;\n    \n    if(typeof p.lock_status===\"string\"){\n    lock=p.lock_status;\n    } else if(p.lock_banner && typeof p.lock_banner.lock_status===\"string\"){\n    lock=p.lock_banner.lock_status;\n    } else if(p.lock_banner && typeof p.lock_banner.message===\"string\"){\n    var m=p.lock_banner.message.toUpperCase();\n    if(m.indexOf(\"APERTA\")>=0) lock=\"aperta\";\n    else if(m.indexOf(\"CHIUSA\")>=0) lock=\"chiusa\";\n    }\n    \n    if(lock) setLockBanner(lock);\n    });\n    render();\n    setLockBanner(\"chiusa\");\n    \n    scope.send({page_action:\"dashboard_load\"});\n  }\n  init();\n})(scope);\n</script>\n</div>",
         "storeOutMessages": false,
         "fwdInMessages": false,
         "resendOnRefresh": true,
@@ -566,20 +570,21 @@
         "y": 760,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "3ea87a016b9b49f9",
-                "d89b2e4b724e3f68",
-                "fed96405fc939955",
-                "275462fa18b73ebc",
-                "ea37c0242551362f",
-                "1ddb54f91c19fd5a"
+                "cd77b4e3afea4089",
+                "7c3729e32a216c3c",
+                "dab3b98f71c6ca15",
+                "306dd2d305958cde",
+                "ee19e6f8fc46b611",
+                "5c5d9ba6ad8adee3",
+                "59b06152fc71933c",
+                "23af6b7a4930177b"
             ]
         ]
     },
     {
-        "id": "3ea87a016b9b49f9",
+        "id": "7c3729e32a216c3c",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Handle Admin lock command (dashboard)",
         "func": "let action = (msg.admin_action || '').toString();\nif (!action) return null;\n\nlet t = flow.get('pendingTimer');\nif (t) {\n  clearTimeout(t);\n  flow.set('pendingTimer', null);\n}\nflow.set('pending', null);\n\nlet lockTarget = null;\nif (action === 'open_lock') lockTarget = 'aperta';\nelse if (action === 'close_lock') lockTarget = 'chiusa';\nelse return null;\n\nflow.set('lock', lockTarget);\n\nmsg.lockTarget = lockTarget;\nmsg.reason = (action === 'open_lock') ? 'admin_open' : 'admin_close';\nmsg.last_error = null;\nmsg.auth_event = { event: 'cancel_wait' };\nreturn msg;",
         "outputs": 1,
@@ -592,15 +597,16 @@
         "y": 760,
         "wires": [
             [
-                "f3e3bcebbe8f5c46",
-                "25cb9bcfeaa2dccc"
+                "6b87eedc73747616",
+                "e36280fdedb7f7f0",
+                "173d9b9361f4528e"
             ]
         ]
     },
     {
-        "id": "35d2255c9f0df545",
+        "id": "4585490e378e2a5f",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "10ef78448a5f86be",
         "name": "Add User Page",
         "order": 1,
@@ -616,15 +622,15 @@
         "y": 900,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "6741d9f362621f8f"
+                "cd77b4e3afea4089",
+                "f71dd9f9f4240886"
             ]
         ]
     },
     {
-        "id": "6741d9f362621f8f",
+        "id": "f71dd9f9f4240886",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare add user request",
         "func": "if ((msg.form_action || '').toString() !== 'add_user') return null;\n\nconst u = msg.user || {};\nconst username = (u.username || '').toString().trim();\nconst accessCode = (u.access_code || '').toString().trim();\nconst telegramId = (u.telegram_id || '').toString().trim();\nconst status = (u.status || '').toString().trim().toUpperCase();\n\nfunction feedback(message) {\n  return { payload: { form_feedback: { status: 'error', message } } };\n}\n\nif (!username) return [null, feedback('Username obbligatorio.')];\nif (!/^[A-Za-z0-9_]{3,64}$/.test(username)) return [null, feedback('Username non valido: usa 3-64 caratteri alfanumerici o underscore.')];\nif (!accessCode) return [null, feedback('Access code obbligatorio.')];\nif (!/^[0-9]{1,16}$/.test(accessCode)) return [null, feedback('Access code non valido: usa solo cifre.')];\nif (!telegramId) return [null, feedback('Telegram ID obbligatorio.')];\nif (!/^[0-9]{1,20}$/.test(telegramId)) return [null, feedback('Telegram ID non valido: usa solo cifre.')];\nif (status !== 'ABILITATO' && status !== 'DISABILITATO') return [null, feedback('Status non valido.')];\n\nconst fingerprint = [username, accessCode, telegramId, status].join('|');\n\n// Se è un duplicato ravvicinato di un inserimento appena riuscito,\n// rispondi direttamente come successo.\nconst lastSuccess = flow.get('lastAddUserSuccess');\nif (\n  lastSuccess &&\n  lastSuccess.fingerprint === fingerprint &&\n  (Date.now() - Number(lastSuccess.ts || 0)) < 8000\n) {\n  return [null, {\n    payload: {\n      form_feedback: {\n        status: 'success',\n        message: 'Utente aggiunto con successo.'\n      }\n    }\n  }];\n}\n\n// Lock anti-doppio submit mentre la richiesta è in corso\nconst addUserLock = flow.get('addUserLock');\nif (\n  addUserLock &&\n  addUserLock.fingerprint === fingerprint &&\n  (Date.now() - Number(addUserLock.ts || 0)) < 8000\n) {\n  return null;\n}\n\nflow.set('addUserLock', { fingerprint, ts: Date.now() });\n\nmsg.new_user = {\n  username,\n  access_code: accessCode,\n  telegram_id: telegramId,\n  status,\n  _fingerprint: fingerprint\n};\n\nmsg.params = [username, accessCode, telegramId];\nreturn [msg, null];",
         "outputs": 2,
@@ -637,17 +643,17 @@
         "y": 900,
         "wires": [
             [
-                "f04692493bb266e5"
+                "dff1b49b72eae8e7"
             ],
             [
-                "35d2255c9f0df545"
+                "4585490e378e2a5f"
             ]
         ]
     },
     {
-        "id": "f04692493bb266e5",
+        "id": "dff1b49b72eae8e7",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Check add user conflicts",
         "query": "SELECT username, access_code, telegram_id FROM utenti WHERE username = $1 OR access_code = $2 OR telegram_id = $3;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -658,14 +664,14 @@
         "y": 860,
         "wires": [
             [
-                "cc5cedf1600876de"
+                "e3340cf9fc9c9dd7"
             ]
         ]
     },
     {
-        "id": "cc5cedf1600876de",
+        "id": "e3340cf9fc9c9dd7",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Decide add user / insert",
         "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst user = msg.new_user || {};\nconst fingerprint = user._fingerprint || [user.username, user.access_code, user.telegram_id, user.status].join('|');\n\n// Se il DB trova già il record ma coincide con un inserimento appena riuscito,\n// allora è quasi certamente un duplicato post-successo: mostra banner verde.\nconst lastSuccess = flow.get('lastAddUserSuccess');\nif (\n  rows.length > 0 &&\n  lastSuccess &&\n  lastSuccess.fingerprint === fingerprint &&\n  (Date.now() - Number(lastSuccess.ts || 0)) < 8000\n) {\n  flow.set('addUserLock', null);\n  return [null, {\n    payload: {\n      form_feedback: {\n        status: 'success',\n        message: 'Utente aggiunto con successo.'\n      }\n    }\n  }];\n}\n\nif (rows.length > 0) {\n  flow.set('addUserLock', null);\n\n  let message = 'Esiste già un utente con gli stessi dati.';\n  if (rows.some(r => (r.username || '').toString() === user.username)) {\n    message = 'Username già presente nel database.';\n  } else if (rows.some(r => (r.access_code || '').toString() === user.access_code)) {\n    message = 'Access code già assegnato a un altro utente.';\n  } else if (rows.some(r => String(r.telegram_id) === String(user.telegram_id))) {\n    message = 'Telegram ID già presente nel database.';\n  }\n\n  return [null, { payload: { form_feedback: { status: 'error', message } } }];\n}\n\nmsg.params = [\n  user.username,\n  user.access_code,\n  Number(user.telegram_id),\n  user.status\n];\nreturn [msg, null];",
         "outputs": 2,
@@ -678,17 +684,17 @@
         "y": 860,
         "wires": [
             [
-                "ea39d28401652a45"
+                "38b08842bbf7a283"
             ],
             [
-                "35d2255c9f0df545"
+                "4585490e378e2a5f"
             ]
         ]
     },
     {
-        "id": "ea39d28401652a45",
+        "id": "38b08842bbf7a283",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Insert user",
         "query": "INSERT INTO utenti (username, access_code, telegram_id, status) VALUES ($1, $2, $3, $4) RETURNING id, username, access_code, telegram_id, status;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -699,14 +705,14 @@
         "y": 860,
         "wires": [
             [
-                "1dec95c4c5b4633f"
+                "f092df163d3ee16a"
             ]
         ]
     },
     {
-        "id": "1dec95c4c5b4633f",
+        "id": "f092df163d3ee16a",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Add user success feedback",
         "func": "const user = msg.new_user || {};\nconst fingerprint = user._fingerprint || [user.username, user.access_code, user.telegram_id, user.status].join('|');\n\nflow.set('addUserLock', null);\nflow.set('lastAddUserSuccess', {\n  fingerprint,\n  ts: Date.now()\n});\n\nmsg.payload = {\n  form_feedback: {\n    status: 'success',\n    message: 'Utente aggiunto con successo.'\n  }\n};\nreturn msg;",
         "outputs": 1,
@@ -719,44 +725,44 @@
         "y": 860,
         "wires": [
             [
-                "35d2255c9f0df545"
+                "4585490e378e2a5f"
             ]
         ]
     },
     {
-        "id": "3b5ffaa689ad7e6c",
+        "id": "e2178b3204ac6a91",
         "type": "catch",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Catch PostgreSQL errors",
         "scope": [
-            "f04692493bb266e5",
-            "ea39d28401652a45",
-            "66cc48b4615a9c36",
-            "9a99e637b38fa766",
-            "a187d3e2cb356d56",
-            "5b02cc0f4660a083",
-            "fd08af9cd57b199e",
-            "83ddbd92c1a53af3",
-            "e2528e3769579b75",
-            "ce1f908e91b93568",
-            "bfca1f5654ef133c",
-            "b1fd12318018c146",
-            "5f6672ac4f1d6952",
-            "478f2db3f5ca731e"
+            "dff1b49b72eae8e7",
+            "38b08842bbf7a283",
+            "a52ec1da4bc0bcd2",
+            "ed7f9a9ab96f218f",
+            "772fb9bbef73f58d",
+            "06193358f385f085",
+            "fd56082407af289d",
+            "4f871975bea852a3",
+            "8ffe592bf3b3f8cc",
+            "4aca972591eb41eb",
+            "8fde4a9c2f591dff",
+            "401dac8c9eeafcd2",
+            "7c2f42b319d4f70e",
+            "d62c369615fa5743"
         ],
         "uncaught": false,
         "x": 1190,
         "y": 980,
         "wires": [
             [
-                "529a013b343385e9"
+                "6e753e0ee9819824"
             ]
         ]
     },
     {
-        "id": "529a013b343385e9",
+        "id": "6e753e0ee9819824",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format DB errors",
         "func": "const sourceId = (msg.error && msg.error.source && msg.error.source.id) ? msg.error.source.id : '';\nconst sourceName = (msg.error && msg.error.source && msg.error.source.name) ? msg.error.source.name : 'PostgreSQL';\nconst errorText = (msg.error && msg.error.message) ? msg.error.message.toString() : 'Errore database';\n\nfunction addUserFeedback(message) {\n  return { payload: { form_feedback: { status: 'error', message } } };\n}\nfunction pageFeedback(message) {\n  return { payload: { feedback: { status: 'error', message } } };\n}\nconst debugMsg = { payload: { source: sourceName, error: errorText } };\n\nif (sourceId === 'aee9255822cf9fe1' || sourceId === '8b6f4516f54373af') {\n  flow.set('addUserLock', null);\n  return [addUserFeedback('Errore database durante il salvataggio: ' + errorText), null, null, null, null, null, null, debugMsg];\n}\n\nif (sourceId === 'ca0be77fce9ab467') {\n  return [null, pageFeedback('Errore database durante il caricamento utenti: ' + errorText), null, null, null, null, null, debugMsg];\n}\n\nif (sourceId === '4bee33004e95af81' || sourceId === 'bcb6f8d1d23be89c') {\n  return [null, null, pageFeedback('Errore database durante il caricamento utenti: ' + errorText), null, null, null, null, debugMsg];\n}\n\nif (sourceId === '3404f951bf5b6d0b' || sourceId === '0b5122c2b467926a') {\n  return [null, null, null, pageFeedback('Errore database durante la modifica utente: ' + errorText), null, null, null, debugMsg];\n}\n\nif (sourceId === 'dd6e03a245171f0c' || sourceId === 'c50a0f7bb1f4469e') {\n  return [null, null, null, null, pageFeedback('Errore database durante la disabilitazione utente: ' + errorText), null, null, debugMsg];\n}\n\nif (sourceId === '8c0694e150450774' || sourceId === 'f9cd88a99f5063a4') {\n  return [null, null, null, null, null, pageFeedback('Errore database durante la riabilitazione utente: ' + errorText), null, debugMsg];\n}\n\nif (sourceId === '5762b99722476995' || sourceId === '86fdc1be70889ce2') {\n  return [null, null, null, null, null, null, pageFeedback('Errore database durante l\\'eliminazione utente: ' + errorText), debugMsg];\n}\n\nreturn [null, null, null, null, null, null, null, debugMsg];",
         "outputs": 8,
@@ -768,35 +774,35 @@
         "y": 980,
         "wires": [
             [
-                "35d2255c9f0df545"
+                "4585490e378e2a5f"
             ],
             [
-                "290d6cae582014dc"
+                "96ba46a14a9c0dfd"
             ],
             [
-                "3596fec3c6fce2b7"
+                "79e1bde506bf866a"
             ],
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ],
             [
-                "bcbff274860508bf"
+                "e779df810497b0eb"
             ],
             [
-                "6ffd6d58ffe95502"
+                "c3003223bb5218c8"
             ],
             [
-                "6f1b53f510361511"
+                "66530dd1b8a7f448"
             ],
             [
-                "8f70990ac465357a"
+                "e6e259e16c2b2de9"
             ]
         ]
     },
     {
-        "id": "8f70990ac465357a",
+        "id": "e6e259e16c2b2de9",
         "type": "debug",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DEBUG DB errors",
         "active": true,
         "tosidebar": true,
@@ -809,9 +815,9 @@
         "wires": []
     },
     {
-        "id": "290d6cae582014dc",
+        "id": "96ba46a14a9c0dfd",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "2f4510044fca0483",
         "name": "View Users Page",
         "order": 1,
@@ -827,15 +833,15 @@
         "y": 1100,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "d89b2e4b724e3f68"
+                "cd77b4e3afea4089",
+                "dab3b98f71c6ca15"
             ]
         ]
     },
     {
-        "id": "3596fec3c6fce2b7",
+        "id": "79e1bde506bf866a",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "4730fe9839081f7a",
         "name": "Edit Users List Page",
         "order": 1,
@@ -851,16 +857,16 @@
         "y": 1220,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "fed96405fc939955",
-                "a89c159cbdf09aef"
+                "cd77b4e3afea4089",
+                "306dd2d305958cde",
+                "a4fb8fce96a3d57c"
             ]
         ]
     },
     {
-        "id": "56bf2a48af752794",
+        "id": "07c92575cfcacc67",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "c8445f2685ccc7c2",
         "name": "Edit User Form Page",
         "order": 1,
@@ -876,16 +882,16 @@
         "y": 1340,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "15e355cce2e05a1e",
-                "9c80f6c853bc481f"
+                "cd77b4e3afea4089",
+                "423ac3b77ddd12af",
+                "142cfa9cda3911bb"
             ]
         ]
     },
     {
-        "id": "bcbff274860508bf",
+        "id": "e779df810497b0eb",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "62a23aaa6f9c5f61",
         "name": "Disable User Page",
         "order": 1,
@@ -901,16 +907,16 @@
         "y": 1460,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "275462fa18b73ebc",
-                "c3d58fd8ba976c94"
+                "cd77b4e3afea4089",
+                "ee19e6f8fc46b611",
+                "81c24f8d49447103"
             ]
         ]
     },
     {
-        "id": "6ffd6d58ffe95502",
+        "id": "c3003223bb5218c8",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "08039dbe22d2affc",
         "name": "Enable User Page",
         "order": 1,
@@ -926,16 +932,16 @@
         "y": 1580,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "ea37c0242551362f",
-                "4fce4505f53aea38"
+                "cd77b4e3afea4089",
+                "5c5d9ba6ad8adee3",
+                "946c72a5cdf85ad7"
             ]
         ]
     },
     {
-        "id": "6f1b53f510361511",
+        "id": "66530dd1b8a7f448",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "d989d2437f49cffc",
         "name": "Delete User Page",
         "order": 1,
@@ -951,16 +957,16 @@
         "y": 1700,
         "wires": [
             [
-                "6ce7183d4c797698",
-                "1ddb54f91c19fd5a",
-                "8517197ac24de9b0"
+                "cd77b4e3afea4089",
+                "59b06152fc71933c",
+                "c64003353f04494c"
             ]
         ]
     },
     {
-        "id": "d89b2e4b724e3f68",
+        "id": "dab3b98f71c6ca15",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare view users load",
         "func": "if ((msg.page_action || '').toString() !== 'view_users_load') return null;\nmsg.feedback = msg.feedback || null;\nreturn msg;",
         "outputs": 1,
@@ -972,14 +978,14 @@
         "y": 1100,
         "wires": [
             [
-                "9a99e637b38fa766"
+                "ed7f9a9ab96f218f"
             ]
         ]
     },
     {
-        "id": "9a99e637b38fa766",
+        "id": "ed7f9a9ab96f218f",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load all users (view)",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti ORDER BY id ASC;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -990,14 +996,14 @@
         "y": 1100,
         "wires": [
             [
-                "0cb7cafbccd892f5"
+                "29d4f8ca1b9f3793"
             ]
         ]
     },
     {
-        "id": "0cb7cafbccd892f5",
+        "id": "29d4f8ca1b9f3793",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format view users result",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { users: rows.map(toUser) };\nif (msg.feedback) msg.payload.feedback = msg.feedback;\nreturn msg;",
         "outputs": 1,
@@ -1009,14 +1015,14 @@
         "y": 1100,
         "wires": [
             [
-                "290d6cae582014dc"
+                "96ba46a14a9c0dfd"
             ]
         ]
     },
     {
-        "id": "fed96405fc939955",
+        "id": "306dd2d305958cde",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare edit users list load",
         "func": "if ((msg.page_action || '').toString() !== 'edit_users_load') return null;\nmsg.feedback = msg.feedback || null;\nreturn msg;",
         "outputs": 1,
@@ -1028,14 +1034,14 @@
         "y": 1220,
         "wires": [
             [
-                "a187d3e2cb356d56"
+                "772fb9bbef73f58d"
             ]
         ]
     },
     {
-        "id": "a187d3e2cb356d56",
+        "id": "772fb9bbef73f58d",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load all users (edit list)",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti ORDER BY id ASC;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1046,14 +1052,14 @@
         "y": 1220,
         "wires": [
             [
-                "702661cbbf5533b2"
+                "ac9dce379ba24640"
             ]
         ]
     },
     {
-        "id": "702661cbbf5533b2",
+        "id": "ac9dce379ba24640",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format edit users list",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { users: rows.map(toUser) };\nif (msg.feedback) msg.payload.feedback = msg.feedback;\nreturn msg;",
         "outputs": 1,
@@ -1065,14 +1071,14 @@
         "y": 1220,
         "wires": [
             [
-                "3596fec3c6fce2b7"
+                "79e1bde506bf866a"
             ]
         ]
     },
     {
-        "id": "a89c159cbdf09aef",
+        "id": "a4fb8fce96a3d57c",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare edit user selection",
         "func": "if ((msg.page_action || '').toString() !== 'edit_select_user') return null;\nconst userId = Number(msg.user_id || 0);\nif (!userId || Number.isNaN(userId)) {\n  return [null, { payload: { feedback: { status: 'error', message: 'Utente non valido.' } } }];\n}\nmsg.user_id = userId;\nmsg.params = [userId];\nreturn [msg, null];",
         "outputs": 2,
@@ -1084,17 +1090,17 @@
         "y": 1280,
         "wires": [
             [
-                "5b02cc0f4660a083"
+                "06193358f385f085"
             ],
             [
-                "3596fec3c6fce2b7"
+                "79e1bde506bf866a"
             ]
         ]
     },
     {
-        "id": "5b02cc0f4660a083",
+        "id": "06193358f385f085",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load single user for edit",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti WHERE id = $1 LIMIT 1;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1105,14 +1111,14 @@
         "y": 1280,
         "wires": [
             [
-                "e2a1106a9844cec8"
+                "847d02192bbc8b25"
             ]
         ]
     },
     {
-        "id": "e2a1106a9844cec8",
+        "id": "847d02192bbc8b25",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Process edit user selection",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (!rows.length) {\n  return [null, null, { payload: { feedback: { status: 'error', message: 'Utente non trovato.' } } }];\n}\nconst user = toUser(rows[0]);\nflow.set('selectedEditUserId', user.id);\nflow.set('selectedEditUser', user);\nreturn [\n  { payload: { tab: 'Modifica Utente' } },\n  { payload: { selected_user: user } },\n  null\n];",
         "outputs": 3,
@@ -1124,20 +1130,20 @@
         "y": 1280,
         "wires": [
             [
-                "6ce7183d4c797698"
+                "cd77b4e3afea4089"
             ],
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ],
             [
-                "3596fec3c6fce2b7"
+                "79e1bde506bf866a"
             ]
         ]
     },
     {
-        "id": "15e355cce2e05a1e",
+        "id": "423ac3b77ddd12af",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Load selected user for edit form",
         "func": "if ((msg.page_action || '').toString() !== 'edit_form_load') return null;\nmsg.payload = { selected_user: flow.get('selectedEditUser') || null };\nreturn msg;",
         "outputs": 1,
@@ -1149,14 +1155,14 @@
         "y": 1340,
         "wires": [
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ]
         ]
     },
     {
-        "id": "9c80f6c853bc481f",
+        "id": "142cfa9cda3911bb",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare edit user update",
         "func": "if ((msg.page_action || '').toString() !== 'submit_edit_user') return null;\nconst u = msg.user || {};\nconst id = Number(u.id || 0);\nconst username = (u.username || '').toString().trim();\nconst accessCode = (u.access_code || '').toString().trim();\nconst telegramId = (u.telegram_id || '').toString().trim();\nconst status = (u.status || '').toString().trim().toUpperCase();\nfunction feedback(message) {\n  return { payload: { feedback: { status: 'error', message } } };\n}\nif (!id || Number.isNaN(id)) return [null, feedback('ID utente non valido.')];\nif (!username) return [null, feedback('Username obbligatorio.')];\nif (!/^[A-Za-z0-9_]{3,64}$/.test(username)) return [null, feedback('Username non valido: usa 3-64 caratteri alfanumerici o underscore.')];\nif (!accessCode) return [null, feedback('Access code obbligatorio.')];\nif (!/^[0-9]{1,16}$/.test(accessCode)) return [null, feedback('Access code non valido: usa solo cifre.')];\nif (!telegramId) return [null, feedback('Telegram ID obbligatorio.')];\nif (!/^[0-9]{1,20}$/.test(telegramId)) return [null, feedback('Telegram ID non valido: usa solo cifre.')];\nif (status !== 'ABILITATO' && status !== 'DISABILITATO') return [null, feedback('Status non valido.')];\nmsg.edit_user = {\n  id,\n  username,\n  access_code: accessCode,\n  telegram_id: telegramId,\n  status\n};\nmsg.params = [username, accessCode, Number(telegramId), id];\nreturn [msg, null];",
         "outputs": 2,
@@ -1168,17 +1174,17 @@
         "y": 1400,
         "wires": [
             [
-                "fd08af9cd57b199e"
+                "fd56082407af289d"
             ],
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ]
         ]
     },
     {
-        "id": "fd08af9cd57b199e",
+        "id": "fd56082407af289d",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Check edit user conflicts",
         "query": "SELECT id, username, access_code, telegram_id FROM utenti WHERE id <> $4 AND (username = $1 OR access_code = $2 OR telegram_id = $3);",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1189,14 +1195,14 @@
         "y": 1400,
         "wires": [
             [
-                "d33c5442a44b846d"
+                "091ae0c6b1d46a79"
             ]
         ]
     },
     {
-        "id": "d33c5442a44b846d",
+        "id": "091ae0c6b1d46a79",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Decide edit user / update",
         "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst user = msg.edit_user || {};\nif (rows.length > 0) {\n  let message = 'Esiste già un utente con gli stessi dati.';\n  if (rows.some(r => (r.username || '').toString() === user.username)) {\n    message = 'Username già presente nel database.';\n  } else if (rows.some(r => (r.access_code || '').toString() === user.access_code)) {\n    message = 'Access code già assegnato a un altro utente.';\n  } else if (rows.some(r => String(r.telegram_id) === String(user.telegram_id))) {\n    message = 'Telegram ID già presente nel database.';\n  }\n  return [null, { payload: { feedback: { status: 'error', message } } }];\n}\nmsg.params = [\n  user.username,\n  user.access_code,\n  Number(user.telegram_id),\n  user.status,\n  user.id\n];\nreturn [msg, null];",
         "outputs": 2,
@@ -1208,17 +1214,17 @@
         "y": 1400,
         "wires": [
             [
-                "83ddbd92c1a53af3"
+                "4f871975bea852a3"
             ],
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ]
         ]
     },
     {
-        "id": "83ddbd92c1a53af3",
+        "id": "4f871975bea852a3",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Update user",
         "query": "UPDATE utenti SET username = $1, access_code = $2, telegram_id = $3, status = $4 WHERE id = $5 RETURNING id, username, access_code, telegram_id, status;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1229,14 +1235,14 @@
         "y": 1400,
         "wires": [
             [
-                "8f1dd0fa1c725098"
+                "ac415c11898681d5"
             ]
         ]
     },
     {
-        "id": "8f1dd0fa1c725098",
+        "id": "ac415c11898681d5",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Edit user success feedback",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (!rows.length) {\n  msg.payload = { feedback: { status: 'error', message: 'Nessun utente aggiornato.' }, selected_user: flow.get('selectedEditUser') || null };\n  return msg;\n}\nconst user = toUser(rows[0]);\nflow.set('selectedEditUserId', user.id);\nflow.set('selectedEditUser', user);\nmsg.payload = {\n  feedback: { status: 'success', message: 'Utente modificato con successo.' },\n  selected_user: user\n};\nreturn msg;",
         "outputs": 1,
@@ -1248,14 +1254,14 @@
         "y": 1400,
         "wires": [
             [
-                "56bf2a48af752794"
+                "07c92575cfcacc67"
             ]
         ]
     },
     {
-        "id": "275462fa18b73ebc",
+        "id": "ee19e6f8fc46b611",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare disable users load",
         "func": "if ((msg.page_action || '').toString() !== 'disable_users_load') return null;\nmsg.feedback = msg.feedback || null;\nreturn msg;",
         "outputs": 1,
@@ -1267,14 +1273,14 @@
         "y": 1460,
         "wires": [
             [
-                "e2528e3769579b75"
+                "8ffe592bf3b3f8cc"
             ]
         ]
     },
     {
-        "id": "e2528e3769579b75",
+        "id": "8ffe592bf3b3f8cc",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load enabled users",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti WHERE status = 'ABILITATO' ORDER BY id ASC;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1285,14 +1291,14 @@
         "y": 1460,
         "wires": [
             [
-                "63d1ef56d32bf034"
+                "5d8442ba39cf54b6"
             ]
         ]
     },
     {
-        "id": "63d1ef56d32bf034",
+        "id": "5d8442ba39cf54b6",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format disable users list",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { users: rows.map(toUser) };\nif (msg.feedback) msg.payload.feedback = msg.feedback;\nreturn msg;",
         "outputs": 1,
@@ -1304,14 +1310,14 @@
         "y": 1460,
         "wires": [
             [
-                "bcbff274860508bf"
+                "e779df810497b0eb"
             ]
         ]
     },
     {
-        "id": "c3d58fd8ba976c94",
+        "id": "81c24f8d49447103",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare disable user action",
         "func": "if ((msg.page_action || '').toString() !== 'disable_user') return null;\nconst userId = Number(msg.user_id || 0);\nif (!userId || Number.isNaN(userId)) {\n  return [null, { payload: { feedback: { status: 'error', message: 'Utente non valido.' } } }];\n}\nmsg.user_id = userId;\nmsg.params = [userId];\nreturn [msg, null];",
         "outputs": 2,
@@ -1323,17 +1329,17 @@
         "y": 1520,
         "wires": [
             [
-                "ce1f908e91b93568"
+                "4aca972591eb41eb"
             ],
             [
-                "bcbff274860508bf"
+                "e779df810497b0eb"
             ]
         ]
     },
     {
-        "id": "ce1f908e91b93568",
+        "id": "4aca972591eb41eb",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Disable user",
         "query": "UPDATE utenti SET status = 'DISABILITATO' WHERE id = $1 AND status = 'ABILITATO' RETURNING id, username, access_code, telegram_id, status;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1344,14 +1350,14 @@
         "y": 1520,
         "wires": [
             [
-                "1886f3372e676eb9"
+                "27cd6c5ce46c7654"
             ]
         ]
     },
     {
-        "id": "1886f3372e676eb9",
+        "id": "27cd6c5ce46c7654",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Refresh disable users after action",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (!rows.length) {\n  msg.feedback = { status: 'error', message: 'Utente non trovato oppure già disabilitato.' };\n  msg.page_action = 'disable_users_load';\n  return msg;\n}\nconst user = toUser(rows[0]);\nconst selectedId = Number(flow.get('selectedEditUserId') || 0);\nif (selectedId && selectedId === user.id) {\n  flow.set('selectedEditUser', user);\n}\nmsg.feedback = { status: 'success', message: 'Utente disabilitato con successo.' };\nmsg.page_action = 'disable_users_load';\nreturn msg;",
         "outputs": 1,
@@ -1363,14 +1369,14 @@
         "y": 1520,
         "wires": [
             [
-                "e2528e3769579b75"
+                "8ffe592bf3b3f8cc"
             ]
         ]
     },
     {
-        "id": "ea37c0242551362f",
+        "id": "5c5d9ba6ad8adee3",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare enable users load",
         "func": "if ((msg.page_action || '').toString() !== 'enable_users_load') return null;\nmsg.feedback = msg.feedback || null;\nreturn msg;",
         "outputs": 1,
@@ -1382,14 +1388,14 @@
         "y": 1580,
         "wires": [
             [
-                "bfca1f5654ef133c"
+                "8fde4a9c2f591dff"
             ]
         ]
     },
     {
-        "id": "bfca1f5654ef133c",
+        "id": "8fde4a9c2f591dff",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load disabled users",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti WHERE status = 'DISABILITATO' ORDER BY id ASC;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1400,14 +1406,14 @@
         "y": 1580,
         "wires": [
             [
-                "702b2ab4c77fb6a3"
+                "1512bb8584d62efc"
             ]
         ]
     },
     {
-        "id": "702b2ab4c77fb6a3",
+        "id": "1512bb8584d62efc",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format enable users list",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { users: rows.map(toUser) };\nif (msg.feedback) msg.payload.feedback = msg.feedback;\nreturn msg;",
         "outputs": 1,
@@ -1419,14 +1425,14 @@
         "y": 1580,
         "wires": [
             [
-                "6ffd6d58ffe95502"
+                "c3003223bb5218c8"
             ]
         ]
     },
     {
-        "id": "4fce4505f53aea38",
+        "id": "946c72a5cdf85ad7",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare enable user action",
         "func": "if ((msg.page_action || '').toString() !== 'enable_user') return null;\nconst userId = Number(msg.user_id || 0);\nif (!userId || Number.isNaN(userId)) {\n  return [null, { payload: { feedback: { status: 'error', message: 'Utente non valido.' } } }];\n}\nmsg.user_id = userId;\nmsg.params = [userId];\nreturn [msg, null];",
         "outputs": 2,
@@ -1438,17 +1444,17 @@
         "y": 1640,
         "wires": [
             [
-                "b1fd12318018c146"
+                "401dac8c9eeafcd2"
             ],
             [
-                "6ffd6d58ffe95502"
+                "c3003223bb5218c8"
             ]
         ]
     },
     {
-        "id": "b1fd12318018c146",
+        "id": "401dac8c9eeafcd2",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Enable user",
         "query": "UPDATE utenti SET status = 'ABILITATO' WHERE id = $1 AND status = 'DISABILITATO' RETURNING id, username, access_code, telegram_id, status;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1459,14 +1465,14 @@
         "y": 1640,
         "wires": [
             [
-                "c1a462d304ea8c0f"
+                "0ffd6d0fcdd292d4"
             ]
         ]
     },
     {
-        "id": "c1a462d304ea8c0f",
+        "id": "0ffd6d0fcdd292d4",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Refresh enable users after action",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (!rows.length) {\n  msg.feedback = { status: 'error', message: 'Utente non trovato oppure già abilitato.' };\n  msg.page_action = 'enable_users_load';\n  return msg;\n}\nconst user = toUser(rows[0]);\nconst selectedId = Number(flow.get('selectedEditUserId') || 0);\nif (selectedId && selectedId === user.id) {\n  flow.set('selectedEditUser', user);\n}\nmsg.feedback = { status: 'success', message: 'Utente riabilitato con successo.' };\nmsg.page_action = 'enable_users_load';\nreturn msg;",
         "outputs": 1,
@@ -1478,14 +1484,14 @@
         "y": 1640,
         "wires": [
             [
-                "bfca1f5654ef133c"
+                "8fde4a9c2f591dff"
             ]
         ]
     },
     {
-        "id": "1ddb54f91c19fd5a",
+        "id": "59b06152fc71933c",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare delete users load",
         "func": "if ((msg.page_action || '').toString() !== 'delete_users_load') return null;\nmsg.feedback = msg.feedback || null;\nreturn msg;",
         "outputs": 1,
@@ -1497,14 +1503,14 @@
         "y": 1700,
         "wires": [
             [
-                "5f6672ac4f1d6952"
+                "7c2f42b319d4f70e"
             ]
         ]
     },
     {
-        "id": "5f6672ac4f1d6952",
+        "id": "7c2f42b319d4f70e",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load all users (delete)",
         "query": "SELECT id, username, access_code, telegram_id, status FROM utenti ORDER BY id ASC;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1515,14 +1521,14 @@
         "y": 1700,
         "wires": [
             [
-                "a57d0656bd880636"
+                "bc25197b70d24912"
             ]
         ]
     },
     {
-        "id": "a57d0656bd880636",
+        "id": "bc25197b70d24912",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format delete users list",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { users: rows.map(toUser) };\nif (msg.feedback) msg.payload.feedback = msg.feedback;\nreturn msg;",
         "outputs": 1,
@@ -1534,14 +1540,14 @@
         "y": 1700,
         "wires": [
             [
-                "6f1b53f510361511"
+                "66530dd1b8a7f448"
             ]
         ]
     },
     {
-        "id": "8517197ac24de9b0",
+        "id": "c64003353f04494c",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare delete user action",
         "func": "if ((msg.page_action || '').toString() !== 'delete_user') return null;\nconst userId = Number(msg.user_id || 0);\nif (!userId || Number.isNaN(userId)) {\n  return [null, { payload: { feedback: { status: 'error', message: 'Utente non valido.' } } }];\n}\nmsg.user_id = userId;\nmsg.params = [userId];\nreturn [msg, null];",
         "outputs": 2,
@@ -1553,17 +1559,17 @@
         "y": 1760,
         "wires": [
             [
-                "478f2db3f5ca731e"
+                "d62c369615fa5743"
             ],
             [
-                "6f1b53f510361511"
+                "66530dd1b8a7f448"
             ]
         ]
     },
     {
-        "id": "478f2db3f5ca731e",
+        "id": "d62c369615fa5743",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Delete user",
         "query": "DELETE FROM utenti WHERE id = $1 RETURNING id, username, access_code, telegram_id, status;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1574,14 +1580,14 @@
         "y": 1760,
         "wires": [
             [
-                "abbe4f3ca813ed77"
+                "b76ee71ac428f73c"
             ]
         ]
     },
     {
-        "id": "abbe4f3ca813ed77",
+        "id": "b76ee71ac428f73c",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Refresh delete users after action",
         "func": "function toUser(row) {\n  return {\n    id: Number(row.id),\n    username: (row.username || '').toString(),\n    access_code: (row.access_code || '').toString(),\n    telegram_id: (row.telegram_id === null || row.telegram_id === undefined) ? '' : Number(row.telegram_id),\n    status: (row.status || '').toString()\n  };\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (!rows.length) {\n  msg.feedback = { status: 'error', message: 'Utente non trovato o già eliminato.' };\n  msg.page_action = 'delete_users_load';\n  return msg;\n}\nconst user = toUser(rows[0]);\nconst selectedId = Number(flow.get('selectedEditUserId') || 0);\nif (selectedId && selectedId === user.id) {\n  flow.set('selectedEditUserId', null);\n  flow.set('selectedEditUser', null);\n}\nmsg.feedback = { status: 'success', message: 'Utente eliminato con successo.' };\nmsg.page_action = 'delete_users_load';\nreturn msg;",
         "outputs": 1,
@@ -1593,14 +1599,14 @@
         "y": 1760,
         "wires": [
             [
-                "5f6672ac4f1d6952"
+                "7c2f42b319d4f70e"
             ]
         ]
     },
     {
-        "id": "f1a2b3c4d5e6f701",
+        "id": "9932deff413efd74",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "d4f5a6b7c8e90123",
         "name": "Activity Log Page",
         "order": 1,
@@ -1616,15 +1622,15 @@
         "y": 1840,
         "wires": [
             [
-                "a1b2c3d4e5f60718",
-                "6ce7183d4c797698"
+                "84580a3efaf422c9",
+                "cd77b4e3afea4089"
             ]
         ]
     },
     {
-        "id": "a1b2c3d4e5f60718",
+        "id": "84580a3efaf422c9",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare activity log load",
         "func": "if ((msg.page_action || '').toString() !== 'activity_log_load') return null;\n\nconst f = msg.filters || {};\nconst dateFrom = (f.date_from || '').toString().trim();\nconst dateTo = (f.date_to || '').toString().trim();\nconst username = (f.username || '').toString().trim();\n\nmsg.filters = {\n  date_from: dateFrom,\n  date_to: dateTo,\n  username: username\n};\n\nmsg.params = [\n  dateFrom || null,\n  dateTo || null,\n  username || null\n];\n\nreturn msg;",
         "outputs": 1,
@@ -1636,14 +1642,14 @@
         "y": 1840,
         "wires": [
             [
-                "b1c2d3e4f5a60718"
+                "16e2e716135b71c1"
             ]
         ]
     },
     {
-        "id": "b1c2d3e4f5a60718",
+        "id": "16e2e716135b71c1",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load activity logs",
         "query": "SELECT\n  id,\n  TO_CHAR(event_time AT TIME ZONE 'Europe/Rome', 'DD/MM/YYYY HH24:MI:SS') AS event_time_fmt,\n  COALESCE(username, '-') AS username,\n  event_label,\n  COALESCE(source, '-') AS source\nFROM log_eventi\nWHERE ($1::date IS NULL OR event_time >= $1::date)\n  AND ($2::date IS NULL OR event_time < ($2::date + INTERVAL '1 day'))\n  AND ($3::text IS NULL OR username ILIKE '%' || $3 || '%')\nORDER BY event_time DESC, id DESC\nLIMIT 500;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1654,14 +1660,14 @@
         "y": 1840,
         "wires": [
             [
-                "c1d2e3f4a5b60718"
+                "8fac401a48f36037"
             ]
         ]
     },
     {
-        "id": "c1d2e3f4a5b60718",
+        "id": "8fac401a48f36037",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format activity log result",
         "func": "function toLog(row) {\n  return {\n    id: Number(row.id),\n    event_time: (row.event_time_fmt || '').toString(),\n    username: (row.username || '-').toString(),\n    event_label: (row.event_label || '').toString(),\n    source: (row.source || '-').toString()\n  };\n}\n\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.payload = { logs: rows.map(toLog) };\nreturn msg;",
         "outputs": 1,
@@ -1673,31 +1679,31 @@
         "y": 1840,
         "wires": [
             [
-                "f1a2b3c4d5e6f701"
+                "9932deff413efd74"
             ]
         ]
     },
     {
-        "id": "d1e2f3a4b5c60718",
+        "id": "1391adaa17a981f7",
         "type": "catch",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Catch activity log DB errors",
         "scope": [
-            "b1c2d3e4f5a60718"
+            "16e2e716135b71c1"
         ],
         "uncaught": false,
         "x": 780,
         "y": 1900,
         "wires": [
             [
-                "e1f2a3b4c5d60718"
+                "af79aa6b84649ac8"
             ]
         ]
     },
     {
-        "id": "e1f2a3b4c5d60718",
+        "id": "af79aa6b84649ac8",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format activity log load error",
         "func": "const errorText = (msg.error && msg.error.message) ? msg.error.message.toString() : 'Errore database';\nmsg.payload = {\n  feedback: {\n    status: 'error',\n    message: 'Errore database durante il caricamento log: ' + errorText\n  }\n};\nreturn msg;",
         "outputs": 1,
@@ -1709,17 +1715,18 @@
         "y": 1900,
         "wires": [
             [
-                "f1a2b3c4d5e6f701"
+                "9932deff413efd74"
             ]
         ]
     },
     {
-        "id": "f2a3b4c5d6e70718",
+        "id": "f2fa20a05915ddfd",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare activity log insert from auth_event",
         "func": "let evt = msg.auth_event || msg.payload;\n\nif (typeof evt === 'string') {\n  try { evt = JSON.parse(evt); } catch(e) { return null; }\n}\n\nif (!evt || typeof evt !== 'object') return null;\n\nconst eventName = (evt.event || '').toString().trim();\n\nconst map = {\n  open_authorized: 'Aperto serratura',\n  close_authorized: 'Chiuso serratura',\n  confirm_timeout: 'Timer click link di verifica scaduto'\n};\n\nconst eventLabel = map[eventName];\nif (!eventLabel) return null;\n\nconst username = (evt.username || '').toString().trim();\nconst source = (evt.src || '').toString().trim();\n\nmsg.params = [\n  eventName,\n  eventLabel,\n  username || null,\n  source || null,\n  JSON.stringify(evt)\n];\n\nreturn msg;",
         "outputs": 1,
+        "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
@@ -1728,14 +1735,14 @@
         "y": 640,
         "wires": [
             [
-                "a2b3c4d5e6f70718"
+                "a9482f760b3119dd"
             ]
         ]
     },
     {
-        "id": "a2b3c4d5e6f70718",
+        "id": "a9482f760b3119dd",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Insert activity log",
         "query": "INSERT INTO log_eventi (event_key, event_label, username, source, details)\nVALUES ($1, $2, $3, $4, $5::jsonb);",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1749,9 +1756,9 @@
         ]
     },
     {
-        "id": "f501c1d2e3a4b503",
+        "id": "73458f65d2680f5b",
         "type": "inject",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "On start -> Load security config",
         "props": [
             {
@@ -1769,20 +1776,20 @@
         "y": 2100,
         "wires": [
             [
-                "f501c1d2e3a4b505"
+                "953583baf0e8d815"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b504",
+        "id": "83b28c80fe871c5a",
         "type": "ui_template",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "group": "f501c1d2e3a4b502",
         "name": "Security Config Page",
         "order": 1,
         "width": "24",
         "height": "18",
-        "format": "<div id=\"esit-security-config-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-security-config-{{$id}}{min-height:760px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-security-config-{{$id}} *{box-sizing:border-box}\n#esit-security-config-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-security-config-{{$id}} .guard .card,#esit-security-config-{{$id}} .panel{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-security-config-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-security-config-{{$id}} .guard h2{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .guard p{margin-top:16px;color:#fff !important;background:transparent !important}\n#esit-security-config-{{$id}} .view{display:none;max-width:980px;margin:0 auto}\n#esit-security-config-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:22px}\n#esit-security-config-{{$id}} h1{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .sub{margin-top:6px;color:#94a3b8}\n#esit-security-config-{{$id}} .actions{display:flex;gap:10px;flex-wrap:wrap}\n#esit-security-config-{{$id}} .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-security-config-{{$id}} .back{background:#1e293b;color:#e2e8f0}\n#esit-security-config-{{$id}} .refresh{background:#475569;color:#fff}\n#esit-security-config-{{$id}} .save{background:#2563eb;color:#fff}\n#esit-security-config-{{$id}} .panel{padding:24px}\n#esit-security-config-{{$id}} label{display:block;margin:0 0 8px 0;color:#cbd5e1;font-size:13px;font-weight:700}\n#esit-security-config-{{$id}} input,#esit-security-config-{{$id}} select{width:100%;margin:0 0 16px 0;padding:12px 14px;border-radius:12px;border:1px solid #334155;background:#0b1220;color:#e5e7eb}\n#esit-security-config-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-security-config-{{$id}} .status{display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #334155}\n#esit-security-config-{{$id}} .status.ok{display:block;background:rgba(20,83,45,.45);border-color:rgba(34,197,94,.45);color:#bbf7d0}\n#esit-security-config-{{$id}} .status.err{display:block;background:rgba(127,29,29,.55);border-color:rgba(220,38,38,.5);color:#fecaca}\n#esit-security-config-{{$id}} .help{margin-top:18px;color:#94a3b8;font-size:13px;line-height:1.6}\n</style>\n\n<div id=\"esit-security-config-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n\n<div id=\"esit-security-config-view-{{$id}}\" class=\"view\">\n  <div class=\"topbar\">\n    <div>\n      <h1>Configurazione parametri di sicurezza</h1>\n      <div class=\"sub\">Gestione timeout, anti-abuso e conferma Telegram.</div>\n    </div>\n    <div class=\"actions\">\n      <button id=\"esit-security-reload-btn-{{$id}}\" class=\"btn refresh\">Ricarica valori</button>\n      <button id=\"esit-security-back-btn-{{$id}}\" class=\"btn back\">Torna alla dashboard</button>\n    </div>\n  </div>\n\n  <div class=\"panel\">\n    <div class=\"grid\">\n      <div>\n        <label for=\"esit-confirm-timeout-{{$id}}\">Timeout conferma Telegram (secondi)</label>\n        <input id=\"esit-confirm-timeout-{{$id}}\" type=\"number\" min=\"5\" max=\"60\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-wrong-code-cooldown-{{$id}}\">Cooldown dopo codice errato (secondi)</label>\n        <input id=\"esit-wrong-code-cooldown-{{$id}}\" type=\"number\" min=\"0\" max=\"30\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-max-wrong-attempts-{{$id}}\">Tentativi errati massimi consecutivi</label>\n        <input id=\"esit-max-wrong-attempts-{{$id}}\" type=\"number\" min=\"1\" max=\"10\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-lockout-duration-{{$id}}\">Durata blocco dopo troppi errori (secondi)</label>\n        <input id=\"esit-lockout-duration-{{$id}}\" type=\"number\" min=\"10\" max=\"3600\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-telegram-required-{{$id}}\">Conferma Telegram obbligatoria</label>\n        <select id=\"esit-telegram-required-{{$id}}\">\n          <option value=\"true\">ON</option>\n          <option value=\"false\">OFF</option>\n        </select>\n      </div>\n    </div>\n\n    <button id=\"esit-security-save-btn-{{$id}}\" class=\"btn save\">Salva configurazione</button>\n    <div id=\"esit-security-config-status-{{$id}}\" class=\"status\"></div>\n\n    <div class=\"help\">\n      I nuovi valori vengono salvati nel database e caricati automaticamente ai successivi riavvii del sistema.\n    </div>\n  </div>\n</div>\n\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-security-config-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-security-config-guard-\"+scope.$id);\n    var view=document.getElementById(\"esit-security-config-view-\"+scope.$id);\n    var backBtn=document.getElementById(\"esit-security-back-btn-\"+scope.$id);\n    var reloadBtn=document.getElementById(\"esit-security-reload-btn-\"+scope.$id);\n    var saveBtn=document.getElementById(\"esit-security-save-btn-\"+scope.$id);\n    var statusBox=document.getElementById(\"esit-security-config-status-\"+scope.$id);\n\n    var confirmTimeout=document.getElementById(\"esit-confirm-timeout-\"+scope.$id);\n    var wrongCodeCooldown=document.getElementById(\"esit-wrong-code-cooldown-\"+scope.$id);\n    var maxWrongAttempts=document.getElementById(\"esit-max-wrong-attempts-\"+scope.$id);\n    var lockoutDuration=document.getElementById(\"esit-lockout-duration-\"+scope.$id);\n    var telegramRequired=document.getElementById(\"esit-telegram-required-\"+scope.$id);\n\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function goDash(){ scope.send({payload:{tab:\"Admin Dashboard\"}}); }\n    function load(){ scope.send({page_action:\"security_config_load\"}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      view.style.display=logged?\"block\":\"none\";\n      if(!logged){ setTimeout(goLogin,3000); return; }\n      load();\n    }\n    function setStatus(kind,msg){\n      statusBox.className=\"status\";\n      statusBox.textContent=msg||\"\";\n      if(!msg) return;\n      statusBox.classList.add(kind===\"success\"?\"ok\":\"err\");\n    }\n    function clearStatus(){ statusBox.className=\"status\"; statusBox.textContent=\"\"; }\n    function renderConfig(cfg){\n      if(!cfg) return;\n      confirmTimeout.value = String(cfg.confirm_timeout_sec);\n      wrongCodeCooldown.value = String(cfg.wrong_code_cooldown_sec);\n      maxWrongAttempts.value = String(cfg.max_wrong_attempts);\n      lockoutDuration.value = String(cfg.lockout_duration_sec);\n      telegramRequired.value = cfg.telegram_confirm_required ? \"true\" : \"false\";\n    }\n    function save(){\n      clearStatus();\n      scope.send({\n        page_action:\"security_config_save\",\n        config:{\n          confirm_timeout_sec:(confirmTimeout.value||\"\").trim(),\n          wrong_code_cooldown_sec:(wrongCodeCooldown.value||\"\").trim(),\n          max_wrong_attempts:(maxWrongAttempts.value||\"\").trim(),\n          lockout_duration_sec:(lockoutDuration.value||\"\").trim(),\n          telegram_confirm_required:(telegramRequired.value||\"true\").trim()\n        }\n      });\n    }\n\n    backBtn.addEventListener(\"click\",goDash);\n    reloadBtn.addEventListener(\"click\",load);\n    saveBtn.addEventListener(\"click\",save);\n    [confirmTimeout,wrongCodeCooldown,maxWrongAttempts,lockoutDuration].forEach(function(el){ el.addEventListener(\"input\",clearStatus); });\n    telegramRequired.addEventListener(\"change\",clearStatus);\n    render();\n\n    scope.$watch(\"msg\", function(msg){\n      if(!msg || !msg.payload) return;\n      if(msg.payload.security_feedback) setStatus(msg.payload.security_feedback.status, msg.payload.security_feedback.message);\n      if(msg.payload.config) renderConfig(msg.payload.config);\n    });\n  }\n  init();\n})(scope);\n</script>\n</div>",
+        "format": "<div id=\"esit-security-config-{{$id}}\" class=\"esit-page\">\n<style>\n#esit-security-config-{{$id}}{min-height:760px;padding:20px;background:linear-gradient(135deg,#0f172a,#111827);border-radius:18px;color:#e5e7eb;font-family:Arial,sans-serif}\n#esit-security-config-{{$id}} *{box-sizing:border-box}\n#esit-security-config-{{$id}} .guard{display:none;min-height:460px;align-items:center;justify-content:center}\n#esit-security-config-{{$id}} .guard .card,#esit-security-config-{{$id}} .panel{background:rgba(17,24,39,.96);border:1px solid #334155;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.2)}\n#esit-security-config-{{$id}} .guard .card{max-width:520px;padding:28px;text-align:center}\n#esit-security-config-{{$id}} .guard h2{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .guard p{margin-top:16px;color:#fff !important;background:transparent !important}\n#esit-security-config-{{$id}} .view{display:none;max-width:980px;margin:0 auto}\n#esit-security-config-{{$id}} .topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:22px}\n#esit-security-config-{{$id}} h1{margin:0;color:#C9A227 !important;background:transparent !important}\n#esit-security-config-{{$id}} .sub{margin-top:6px;color:#94a3b8}\n#esit-security-config-{{$id}} .actions{display:flex;gap:10px;flex-wrap:wrap}\n#esit-security-config-{{$id}} .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}\n#esit-security-config-{{$id}} .back{background:#1e293b;color:#e2e8f0}\n#esit-security-config-{{$id}} .refresh{background:#475569;color:#fff}\n#esit-security-config-{{$id}} .save{background:#2563eb;color:#fff; margin-top: 20px !important}\n#esit-security-config-{{$id}} .panel{padding:24px}\n#esit-security-config-{{$id}} label{display:block;margin:0 0 8px 0;color:#cbd5e1;font-size:13px;font-weight:700}\n#esit-security-config-{{$id}} input,#esit-security-config-{{$id}} select{width:100%;margin:0 0 16px 0;padding:12px 14px;border-radius:12px;border:1px solid #334155;background:#0b1220;color:#e5e7eb}\n#esit-security-config-{{$id}} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}\n#esit-security-config-{{$id}} .status{display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #334155}\n#esit-security-config-{{$id}} .status.ok{display:block;background:rgba(20,83,45,.45);border-color:rgba(34,197,94,.45);color:#bbf7d0}\n#esit-security-config-{{$id}} .status.err{display:block;background:rgba(127,29,29,.55);border-color:rgba(220,38,38,.5);color:#fecaca}\n#esit-security-config-{{$id}} .help{margin-top:18px;color:#94a3b8;font-size:13px;line-height:1.6}\n</style>\n\n<div id=\"esit-security-config-guard-{{$id}}\" class=\"guard\">\n  <div class=\"card\">\n    <h2>Accesso non autorizzato</h2>\n    <p>Non risulti autenticato. Verrai reindirizzato automaticamente alla pagina di login.</p>\n  </div>\n</div>\n\n<div id=\"esit-security-config-view-{{$id}}\" class=\"view\">\n  <div class=\"topbar\">\n    <div>\n      <h1>Configurazione parametri di sicurezza</h1>\n      <div class=\"sub\">Gestione timeout, anti-abuso e conferma Telegram.</div>\n    </div>\n    <div class=\"actions\">\n      <button id=\"esit-security-reload-btn-{{$id}}\" class=\"btn refresh\">Ricarica valori</button>\n      <button id=\"esit-security-back-btn-{{$id}}\" class=\"btn back\">Torna alla dashboard</button>\n    </div>\n  </div>\n\n  <div class=\"panel\">\n    <div class=\"grid\">\n      <div>\n        <label for=\"esit-confirm-timeout-{{$id}}\">Timeout conferma Telegram (secondi)</label>\n        <input id=\"esit-confirm-timeout-{{$id}}\" type=\"number\" min=\"5\" max=\"60\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-wrong-code-cooldown-{{$id}}\">Cooldown dopo codice errato (secondi)</label>\n        <input id=\"esit-wrong-code-cooldown-{{$id}}\" type=\"number\" min=\"0\" max=\"30\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-max-wrong-attempts-{{$id}}\">Tentativi errati massimi consecutivi</label>\n        <input id=\"esit-max-wrong-attempts-{{$id}}\" type=\"number\" min=\"1\" max=\"10\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-lockout-duration-{{$id}}\">Durata blocco dopo troppi errori (secondi)</label>\n        <input id=\"esit-lockout-duration-{{$id}}\" type=\"number\" min=\"10\" max=\"3600\" step=\"1\">\n      </div>\n      <div>\n        <label for=\"esit-telegram-required-{{$id}}\">Conferma Telegram obbligatoria</label>\n        <select id=\"esit-telegram-required-{{$id}}\">\n          <option value=\"true\">ON</option>\n          <option value=\"false\">OFF</option>\n        </select>\n      </div>\n    </div>\n\n    <button id=\"esit-security-save-btn-{{$id}}\" class=\"btn save\">Salva configurazione</button>\n    <div id=\"esit-security-config-status-{{$id}}\" class=\"status\"></div>\n\n    \n  </div>\n</div>\n\n<script>\n(function(scope){\n  function init(){\n    var root=document.getElementById(\"esit-security-config-\"+scope.$id);\n    if(!root){setTimeout(init,100);return;}\n    if(root.dataset.bound===\"1\") return;\n    root.dataset.bound=\"1\";\n\n    var AUTH_KEY=\"esit_admin_logged_in\";\n    var guard=document.getElementById(\"esit-security-config-guard-\"+scope.$id);\n    var view=document.getElementById(\"esit-security-config-view-\"+scope.$id);\n    var backBtn=document.getElementById(\"esit-security-back-btn-\"+scope.$id);\n    var reloadBtn=document.getElementById(\"esit-security-reload-btn-\"+scope.$id);\n    var saveBtn=document.getElementById(\"esit-security-save-btn-\"+scope.$id);\n    var statusBox=document.getElementById(\"esit-security-config-status-\"+scope.$id);\n\n    var confirmTimeout=document.getElementById(\"esit-confirm-timeout-\"+scope.$id);\n    var wrongCodeCooldown=document.getElementById(\"esit-wrong-code-cooldown-\"+scope.$id);\n    var maxWrongAttempts=document.getElementById(\"esit-max-wrong-attempts-\"+scope.$id);\n    var lockoutDuration=document.getElementById(\"esit-lockout-duration-\"+scope.$id);\n    var telegramRequired=document.getElementById(\"esit-telegram-required-\"+scope.$id);\n\n    function goLogin(){ scope.send({payload:{tab:\"Login Admin\"}}); }\n    function goDash(){ scope.send({payload:{tab:\"Admin Dashboard\"}}); }\n    function load(){ scope.send({page_action:\"security_config_load\"}); }\n    function render(){\n      var logged=window.sessionStorage.getItem(AUTH_KEY)===\"1\";\n      guard.style.display=logged?\"none\":\"flex\";\n      view.style.display=logged?\"block\":\"none\";\n      if(!logged){ setTimeout(goLogin,3000); return; }\n      load();\n    }\n    function setStatus(kind,msg){\n      statusBox.className=\"status\";\n      statusBox.textContent=msg||\"\";\n      if(!msg) return;\n      statusBox.classList.add(kind===\"success\"?\"ok\":\"err\");\n    }\n    function clearStatus(){ statusBox.className=\"status\"; statusBox.textContent=\"\"; }\n    function renderConfig(cfg){\n      if(!cfg) return;\n      confirmTimeout.value = String(cfg.confirm_timeout_sec);\n      wrongCodeCooldown.value = String(cfg.wrong_code_cooldown_sec);\n      maxWrongAttempts.value = String(cfg.max_wrong_attempts);\n      lockoutDuration.value = String(cfg.lockout_duration_sec);\n      telegramRequired.value = cfg.telegram_confirm_required ? \"true\" : \"false\";\n    }\n    function save(){\n      clearStatus();\n      scope.send({\n        page_action:\"security_config_save\",\n        config:{\n          confirm_timeout_sec:(confirmTimeout.value||\"\").trim(),\n          wrong_code_cooldown_sec:(wrongCodeCooldown.value||\"\").trim(),\n          max_wrong_attempts:(maxWrongAttempts.value||\"\").trim(),\n          lockout_duration_sec:(lockoutDuration.value||\"\").trim(),\n          telegram_confirm_required:(telegramRequired.value||\"true\").trim()\n        }\n      });\n    }\n\n    backBtn.addEventListener(\"click\",goDash);\n    reloadBtn.addEventListener(\"click\",load);\n    saveBtn.addEventListener(\"click\",save);\n    [confirmTimeout,wrongCodeCooldown,maxWrongAttempts,lockoutDuration].forEach(function(el){ el.addEventListener(\"input\",clearStatus); });\n    telegramRequired.addEventListener(\"change\",clearStatus);\n    render();\n\n    scope.$watch(\"msg\", function(msg){\n      if(!msg || !msg.payload) return;\n      if(msg.payload.security_feedback) setStatus(msg.payload.security_feedback.status, msg.payload.security_feedback.message);\n      if(msg.payload.config) renderConfig(msg.payload.config);\n    });\n  }\n  init();\n})(scope);\n</script>\n</div>",
         "storeOutMessages": false,
         "fwdInMessages": false,
         "resendOnRefresh": true,
@@ -1792,16 +1799,16 @@
         "y": 2040,
         "wires": [
             [
-                "f501c1d2e3a4b506",
-                "f501c1d2e3a4b509",
-                "6ce7183d4c797698"
+                "924f7ae05aeac74b",
+                "ab99089f94db5fca",
+                "cd77b4e3afea4089"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b505",
+        "id": "953583baf0e8d815",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Load security config",
         "query": "SELECT id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required FROM sicurezza_config WHERE id = 1 LIMIT 1;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1812,14 +1819,14 @@
         "y": 2100,
         "wires": [
             [
-                "f501c1d2e3a4b507"
+                "aa17438e5e5465d2"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b506",
+        "id": "924f7ae05aeac74b",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare security config load",
         "func": "if ((msg.page_action || '').toString() !== 'security_config_load') return null;\nreturn msg;",
         "outputs": 1,
@@ -1832,14 +1839,14 @@
         "y": 2000,
         "wires": [
             [
-                "f501c1d2e3a4b505"
+                "953583baf0e8d815"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b507",
+        "id": "aa17438e5e5465d2",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format security config load + cache",
         "func": "function toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nconst defaults = {\n  confirm_timeout_sec: 10,\n  wrong_code_cooldown_sec: 0,\n  max_wrong_attempts: 3,\n  lockout_duration_sec: 60,\n  telegram_confirm_required: true\n};\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst row = rows.length > 0 ? rows[0] : {};\nconst cfg = {\n  confirm_timeout_sec: Math.min(60, Math.max(5, toInt(row.confirm_timeout_sec, defaults.confirm_timeout_sec))),\n  wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(row.wrong_code_cooldown_sec, defaults.wrong_code_cooldown_sec))),\n  max_wrong_attempts: Math.min(10, Math.max(1, toInt(row.max_wrong_attempts, defaults.max_wrong_attempts))),\n  lockout_duration_sec: Math.min(3600, Math.max(10, toInt(row.lockout_duration_sec, defaults.lockout_duration_sec))),\n  telegram_confirm_required: toBool(row.telegram_confirm_required, defaults.telegram_confirm_required)\n};\nflow.set('securityConfig', cfg);\nmsg.payload = { config: cfg };\nreturn msg;",
         "outputs": 1,
@@ -1852,14 +1859,14 @@
         "y": 2100,
         "wires": [
             [
-                "f501c1d2e3a4b504"
+                "83b28c80fe871c5a"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b509",
+        "id": "ab99089f94db5fca",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Prepare security config save",
         "func": "if ((msg.page_action || '').toString() !== 'security_config_save') return null;\n\nconst c = msg.config || {};\nfunction fail(message) {\n  return { payload: { security_feedback: { status: 'error', message } } };\n}\nfunction parseIntStrict(value, name) {\n  const s = (value || '').toString().trim();\n  if (!/^[-]?[0-9]+$/.test(s)) throw new Error(name + ' non valido.');\n  return Number(s);\n}\nlet confirmTimeout, wrongCodeCooldown, maxWrongAttempts, lockoutDuration;\ntry {\n  confirmTimeout = parseIntStrict(c.confirm_timeout_sec, 'Timeout conferma Telegram');\n  wrongCodeCooldown = parseIntStrict(c.wrong_code_cooldown_sec, 'Cooldown dopo codice errato');\n  maxWrongAttempts = parseIntStrict(c.max_wrong_attempts, 'Tentativi errati massimi');\n  lockoutDuration = parseIntStrict(c.lockout_duration_sec, 'Durata blocco');\n} catch (e) {\n  return [null, fail(e.message)];\n}\nif (confirmTimeout < 5 || confirmTimeout > 60) return [null, fail('Timeout conferma Telegram: usa un valore tra 5 e 60 secondi.')];\nif (wrongCodeCooldown < 0 || wrongCodeCooldown > 30) return [null, fail('Cooldown dopo codice errato: usa un valore tra 0 e 30 secondi.')];\nif (maxWrongAttempts < 1 || maxWrongAttempts > 10) return [null, fail('Tentativi errati massimi: usa un valore tra 1 e 10.')];\nif (lockoutDuration < 10 || lockoutDuration > 3600) return [null, fail('Durata blocco: usa un valore tra 10 e 3600 secondi.')];\n\nlet telegramRequired = (c.telegram_confirm_required || '').toString().trim().toLowerCase();\nif (telegramRequired !== 'true' && telegramRequired !== 'false') {\n  return [null, fail('Conferma Telegram obbligatoria: valore non valido.')];\n}\ntelegramRequired = (telegramRequired === 'true');\n\nmsg.params = [\n  1,\n  confirmTimeout,\n  wrongCodeCooldown,\n  maxWrongAttempts,\n  lockoutDuration,\n  telegramRequired\n];\nreturn [msg, null];",
         "outputs": 2,
@@ -1872,17 +1879,17 @@
         "y": 2040,
         "wires": [
             [
-                "f501c1d2e3a4b510"
+                "8d51108694a06421"
             ],
             [
-                "f501c1d2e3a4b504"
+                "83b28c80fe871c5a"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b510",
+        "id": "8d51108694a06421",
         "type": "postgresql",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "DB Save security config",
         "query": "INSERT INTO sicurezza_config (id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6, NOW())\nON CONFLICT (id) DO UPDATE SET\n  confirm_timeout_sec = EXCLUDED.confirm_timeout_sec,\n  wrong_code_cooldown_sec = EXCLUDED.wrong_code_cooldown_sec,\n  max_wrong_attempts = EXCLUDED.max_wrong_attempts,\n  lockout_duration_sec = EXCLUDED.lockout_duration_sec,\n  telegram_confirm_required = EXCLUDED.telegram_confirm_required,\n  updated_at = NOW()\nRETURNING id, confirm_timeout_sec, wrong_code_cooldown_sec, max_wrong_attempts, lockout_duration_sec, telegram_confirm_required;",
         "postgreSQLConfig": "fdbf6757387d9448",
@@ -1893,14 +1900,14 @@
         "y": 2040,
         "wires": [
             [
-                "f501c1d2e3a4b511"
+                "e29863ccc6865c96"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b511",
+        "id": "e29863ccc6865c96",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format security config save + cache",
         "func": "function toInt(v, def) {\n  v = Number(v);\n  return Number.isFinite(v) ? Math.trunc(v) : def;\n}\nfunction toBool(v, def) {\n  if (typeof v === 'boolean') return v;\n  if (typeof v === 'string') {\n    const s = v.toLowerCase().trim();\n    if (s === 'true' || s === '1' || s === 'on') return true;\n    if (s === 'false' || s === '0' || s === 'off') return false;\n  }\n  if (typeof v === 'number') return v !== 0;\n  return def;\n}\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst row = rows.length > 0 ? rows[0] : {};\nconst cfg = {\n  confirm_timeout_sec: Math.min(60, Math.max(5, toInt(row.confirm_timeout_sec, 10))),\n  wrong_code_cooldown_sec: Math.min(30, Math.max(0, toInt(row.wrong_code_cooldown_sec, 0))),\n  max_wrong_attempts: Math.min(10, Math.max(1, toInt(row.max_wrong_attempts, 3))),\n  lockout_duration_sec: Math.min(3600, Math.max(10, toInt(row.lockout_duration_sec, 60))),\n  telegram_confirm_required: toBool(row.telegram_confirm_required, true)\n};\nflow.set('securityConfig', cfg);\nmsg.payload = {\n  security_feedback: {\n    status: 'success',\n    message: 'Configurazione di sicurezza salvata con successo.'\n  },\n  config: cfg\n};\nreturn msg;",
         "outputs": 1,
@@ -1913,32 +1920,32 @@
         "y": 2040,
         "wires": [
             [
-                "f501c1d2e3a4b504"
+                "83b28c80fe871c5a"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b512",
+        "id": "cb7cb939256909df",
         "type": "catch",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Catch security config DB errors",
         "scope": [
-            "f501c1d2e3a4b505",
-            "f501c1d2e3a4b510"
+            "953583baf0e8d815",
+            "8d51108694a06421"
         ],
         "uncaught": false,
         "x": 890,
         "y": 2160,
         "wires": [
             [
-                "f501c1d2e3a4b513"
+                "02d6bd9e8308a986"
             ]
         ]
     },
     {
-        "id": "f501c1d2e3a4b513",
+        "id": "02d6bd9e8308a986",
         "type": "function",
-        "z": "e243a5906dab8ec4",
+        "z": "3f05bed5ca4ebe50",
         "name": "Format security config DB error",
         "func": "const errorText = (msg.error && msg.error.message) ? msg.error.message.toString() : 'Errore database';\nmsg.payload = {\n  security_feedback: {\n    status: 'error',\n    message: 'Errore database durante il salvataggio/caricamento configurazione: ' + errorText\n  }\n};\nreturn msg;",
         "outputs": 1,
@@ -1951,7 +1958,105 @@
         "y": 2160,
         "wires": [
             [
-                "f501c1d2e3a4b504"
+                "83b28c80fe871c5a"
+            ]
+        ]
+    },
+    {
+        "id": "2e379220c84f2249",
+        "type": "function",
+        "z": "3f05bed5ca4ebe50",
+        "name": "WRONG CODE alert start",
+        "func": "const err = msg.last_error || {};\nif (!err || (err.type !== 'wrong_code' && err.type !== 'lockout_started')) return null;\n\nconst tsSec = Number(err.ts || 0);\nconst d = tsSec > 0 ? new Date(tsSec * 1000) : new Date();\n\nfunction formatRome(date) {\n    try {\n        const parts = new Intl.DateTimeFormat('it-IT', {\n            timeZone: 'Europe/Rome',\n            year: 'numeric',\n            month: '2-digit',\n            day: '2-digit',\n            hour: '2-digit',\n            minute: '2-digit',\n            second: '2-digit',\n            hour12: false\n        }).formatToParts(date);\n        const map = {};\n        for (const p of parts) {\n            if (p.type !== 'literal') map[p.type] = p.value;\n        }\n        return `${map.day}/${map.month}/${map.year} ${map.hour}:${map.minute}:${map.second}`;\n    } catch (e) {\n        const pad = n => String(n).padStart(2, '0');\n        return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;\n    }\n}\n\nmsg._wrongCodeAlertText = `Codice errato inserito, Data: ${formatRome(d)}`;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1840,
+        "y": 540,
+        "wires": [
+            [
+                "b061ce7339050bc7"
+            ]
+        ]
+    },
+    {
+        "id": "b061ce7339050bc7",
+        "type": "postgresql",
+        "z": "3f05bed5ca4ebe50",
+        "name": "DB Load all telegram ids for wrong code alert",
+        "query": "SELECT DISTINCT telegram_id\nFROM utenti\nWHERE status = 'ABILITATO'\n  AND telegram_id IS NOT NULL\n  AND TRIM(CAST(telegram_id AS TEXT)) <> ''\nORDER BY telegram_id ASC;",
+        "postgreSQLConfig": "fdbf6757387d9448",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 2200,
+        "y": 540,
+        "wires": [
+            [
+                "a0f0c4c8634295b1"
+            ]
+        ]
+    },
+    {
+        "id": "a0f0c4c8634295b1",
+        "type": "function",
+        "z": "3f05bed5ca4ebe50",
+        "name": "WRONG CODE fanout valid recipients",
+        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst text = (msg._wrongCodeAlertText || '').toString().trim() || 'Codice errato inserito';\nconst seen = new Set();\nlet sent = 0;\nlet skipped = 0;\n\nfor (const row of rows) {\n    let raw = row ? row.telegram_id : null;\n\n    if (raw === null || raw === undefined) {\n        skipped++;\n        continue;\n    }\n\n    raw = String(raw).trim();\n\n    if (!/^[0-9]{1,20}$/.test(raw)) {\n        skipped++;\n        continue;\n    }\n\n    const chatId = Number(raw);\n\n    if (!Number.isSafeInteger(chatId) || chatId <= 0) {\n        skipped++;\n        continue;\n    }\n\n    if (seen.has(chatId)) {\n        continue;\n    }\n    seen.add(chatId);\n\n    node.send({\n        payload: {\n            chatId,\n            type: 'message',\n            content: text\n        }\n    });\n\n    sent++;\n}\n\nflow.set('lastWrongCodeBroadcastStats', {\n    sent,\n    skipped,\n    total_rows: rows.length,\n    ts: Date.now()\n});\n\nnode.status({ fill: 'green', shape: 'dot', text: `inviati ${sent}, scartati ${skipped}` });\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2580,
+        "y": 540,
+        "wires": [
+            [
+                "d462aaa3e09ddfd8"
+            ]
+        ]
+    },
+    {
+        "id": "23af6b7a4930177b",
+        "type": "function",
+        "z": "3f05bed5ca4ebe50",
+        "name": "Load dashboard lock status",
+        "func": "if ((msg.page_action || '').toString() !== 'dashboard_load') return null;\n\nmsg.lock = (flow.get('lock') || 'chiusa').toString();\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 600,
+        "wires": [
+            [
+                "173d9b9361f4528e"
+            ]
+        ]
+    },
+    {
+        "id": "173d9b9361f4528e",
+        "type": "function",
+        "z": "3f05bed5ca4ebe50",
+        "name": "Prepare dashboard lock banner",
+        "func": "function normalizeLock(v) {\n    if (v === undefined || v === null) return null;\n    const s = v.toString().trim().toLowerCase();\n\n    if (s.indexOf('aperta') >= 0) return 'aperta';\n    if (s.indexOf('chiusa') >= 0) return 'chiusa';\n\n    return null;\n}\n\nlet lock =\n    normalizeLock(msg.lockTarget) ||\n    normalizeLock(msg.lock) ||\n    normalizeLock(msg.payload && msg.payload.lock_status);\n\nif (!lock) {\n    let p = msg.payload;\n\n    if (typeof p === 'string') {\n        try { p = JSON.parse(p); } catch (e) {}\n    }\n\n    let state = null;\n    if (p && p.current && p.current.state) state = p.current.state;\n    else if (p && p.state) state = p.state;\n\n    if (state) {\n        const reported = state.reported || {};\n        const desired  = state.desired  || {};\n\n        lock =\n            normalizeLock(reported.lock) ||\n            normalizeLock(desired.lock);\n    }\n}\n\nlock = lock || normalizeLock(flow.get('lock')) || 'chiusa';\nflow.set('lock', lock);\n\nmsg.payload = {\n    lock_status: lock,\n    lock_banner: {\n        status: lock === 'aperta' ? 'success' : 'error',\n        lock_status: lock,\n        message: 'Stato serratura: ' + lock.toUpperCase()\n    }\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1150,
+        "y": 600,
+        "wires": [
+            [
+                "8f5d954f685d89ba"
             ]
         ]
     },
@@ -2263,7 +2368,7 @@
         "hidden": false
     },
     {
-        "id": "9e94275f9d0b515e",
+        "id": "5044f50652219d4f",
         "type": "global-config",
         "env": [],
         "modules": {
