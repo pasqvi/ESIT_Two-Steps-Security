@@ -13,12 +13,12 @@
 
 #include <Servo.h>
 
-#define emptyString String()
-
 #include <configuration.h>
 #include <errors.h>
 
-// -------------------- PIN --------------------
+#define emptyString String()
+
+// PIN 
 #define IR_PIN   D5
 #define LOCK_PIN D6
 
@@ -26,12 +26,12 @@
 #define I2C_SDA_PIN D2
 #define I2C_SCL_PIN D1
 
-// LCD
+// LCD Settings
 #define LCD_ADDR 0x27
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
-// -------------------- SERVO --------------------
+// -------------------- SERVO MOTOR --------------------
 Servo lockServo;
 
 static const uint8_t SERVO_CLOSED_ANGLE = 0;
@@ -123,7 +123,7 @@ void printTestTime(const char* name, uint32_t elapsedMs, const char* suffix = nu
   Serial.println();
 }
 
-// -------------------- LCD helpers --------------------
+// -------------------- LCD Functions --------------------
 static String pad16(const String& s) {
   if (s.length() == 16) return s;
   if (s.length() > 16) return s.substring(0, 16);
@@ -132,7 +132,7 @@ static String pad16(const String& s) {
   return out;
 }
 
-void lcdWrite2(const String& l0, const String& l1) {
+void lcdWrite(const String& l0, const String& l1) {
   String a = pad16(l0);
   String b = pad16(l1);
 
@@ -521,21 +521,21 @@ void updateLCDUi() {
   uint32_t ms = millis();
 
   if (bannerWrong && ms < bannerWrongUntilMs) {
-    lcdWrite2("CODICE ERRATO", "");
+    lcdWrite("CODICE ERRATO", "");
     return;
   } else {
     bannerWrong = false;
   }
 
   if (bannerDisabled && ms < bannerDisabledUntilMs) {
-    lcdWrite2("UTENTE DISABIL.", "ACCESSO NEGATO");
+    lcdWrite("UTENTE DISABIL.", "ACCESSO NEGATO");
     return;
   } else {
     bannerDisabled = false;
   }
 
   if (bannerTimeout && ms < bannerTimeoutUntilMs) {
-    lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
+    lcdWrite("TEMPO SCADUTO", "SERRATURA CHIUSA");
     return;
   } else {
     bannerTimeout = false;
@@ -555,7 +555,7 @@ void updateLCDUi() {
         authCandidatePending = false;
       }
 
-      lcdWrite2("TEMPO SCADUTO", "SERRATURA CHIUSA");
+      lcdWrite("TEMPO SCADUTO", "SERRATURA CHIUSA");
       return;
     }
 
@@ -565,25 +565,25 @@ void updateLCDUi() {
 
     if (remS != lastCountdownShown) {
       lastCountdownShown = remS;
-      lcdWrite2("CONFERMA ENTRO", "T-" + String(remS) + "s");
+      lcdWrite("CONFERMA ENTRO", "T-" + String(remS) + "s");
     }
     return;
   }
 
   if (backendCheckActive) {
-    lcdWrite2("VERIFICA CODICE", "ATTENDI...");
+    lcdWrite("VERIFICA CODICE", "ATTENDI...");
     return;
   }
 
   if (codeBuffer.length() > 0) {
-    lcdWrite2("CODICE: " + codeBuffer, "");
+    lcdWrite("CODICE: " + codeBuffer, "");
     return;
   }
 
   if (serratura_aperta) {
-    lcdWrite2("SERRATURA", "APERTA");
+    lcdWrite("SERRATURA", "APERTA");
   } else {
-    lcdWrite2("SERRATURA", "CHIUSA");
+    lcdWrite("SERRATURA", "CHIUSA");
   }
 }
 
@@ -600,7 +600,7 @@ void setup() {
   lcd.begin();
   lcd.backlight();
   lcd.clear();
-  lcdWrite2("AVVIO...", "");
+  lcdWrite("AVVIO...", "");
 
   WiFi.hostname(THINGNAME);
   WiFi.mode(WIFI_STA);
@@ -621,7 +621,7 @@ void setup() {
   irrecv.enableIRIn();
 
   Serial.println("Ready. Digita codice IR + OK.");
-  lcdWrite2("PRONTO!", "IR + OK");
+  lcdWrite("PRONTO!", "IR + OK");
   delay(1000);
 }
 
