@@ -84,6 +84,9 @@ uint32_t bannerDisabledUntilMs = 0;
 bool bannerTimeout = false;
 uint32_t bannerTimeoutUntilMs = 0;
 
+bool bannerLockout = false;
+uint32_t bannerLockoutUntilMs = 0;
+
 bool countdownActive = false;
 uint32_t countdownEndMs = 0;
 int lastCountdownShown = -1;
@@ -160,6 +163,11 @@ void startDisabledBanner() {
 void startTimeoutBanner() {
   bannerTimeout = true;
   bannerTimeoutUntilMs = millis() + 3000;
+}
+
+void startLockoutBanner() {
+  bannerLockout = true;
+  bannerLockoutUntilMs = millis() + 5000;
 }
 
 void startBackendCheck() {
@@ -313,6 +321,12 @@ void parseAuthEventPayload(const String& payload) {
   if (event == "wrong_code") {
     cancelPendingOperationState();
     startWrongBanner();
+    return;
+  }
+
+  if (event == "lockout_started") {
+    cancelPendingOperationState();
+    startLockoutBanner();
     return;
   }
 
@@ -519,6 +533,13 @@ void sendIRCodeRequest(const String& code) {
 
 void updateLCDUi() {
   uint32_t ms = millis();
+
+  if (bannerLockout && ms < bannerLockoutUntilMs) {
+    lcdWrite("SISTEMA BLOCC.", "TROPPI ERRORI");
+    return;
+  } else {
+    bannerLockout = false;
+  }
 
   if (bannerWrong && ms < bannerWrongUntilMs) {
     lcdWrite("CODICE ERRATO", "");
