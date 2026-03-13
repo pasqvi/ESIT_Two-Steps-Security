@@ -166,9 +166,13 @@ void startTimeoutBanner() {
   bannerTimeoutUntilMs = millis() + 3000;
 }
 
-void startLockoutBanner() {
+void startLockoutBanner(uint32_t durationSec = 5) {
   bannerLockout = true;
-  bannerLockoutUntilMs = millis() + 5000;
+
+  uint64_t durationMs64 = (uint64_t)durationSec * 1000ULL;
+  if (durationMs64 > 0xFFFFFFFFULL) durationMs64 = 0xFFFFFFFFULL;
+
+  bannerLockoutUntilMs = millis() + (uint32_t)durationMs64;
 }
 
 void startBackendCheck() {
@@ -267,11 +271,13 @@ void parseAuthEventPayload(const String& payload) {
   String event = "";
   uint32_t expiresTs = 0;
   uint32_t timeoutSec = 0;
+  uint32_t retryAfterSec = 0;
 
   if (!err) {
     event = (const char*)(doc["event"] | "");
     expiresTs = doc["expires_ts"] | 0;
     timeoutSec = doc["timeout_sec"] | 0;
+    retryAfterSec = doc["retry_after_sec"] | 0;
   } else {
     event = raw;
     event.trim();
@@ -326,7 +332,7 @@ void parseAuthEventPayload(const String& payload) {
 
   if (event == "lockout_started") {
     cancelPendingOperationState();
-    startLockoutBanner();
+    startLockoutBanner(retryAfterSec > 0 ? retryAfterSec : 5);
     return;
   }
 
@@ -525,12 +531,12 @@ void sendIRCodeRequest(const String& code) {
   Serial.println(out);
 
   if (!client.publish(TOPIC_UPDATE, out, false, 0)) {
-  Serial.print("Publish error -> ");
-  lwMQTTErr(client.lastError());
-  Serial.println();
+    Serial.print("Publish error -> ");
+    lwMQTTErr(client.lastError());
+    Serial.println();
 
-  cancelPendingOperationState();
-  return;
+    cancelPendingOperationState();
+    return;
   }
 }
 
@@ -702,7 +708,7 @@ void loop() {
       if (backendCheckActive || countdownActive) {
         Serial.println("Input ignored: operation already in progress.");
       } else if (k >= '0' && k <= '9') {
-	if (codeBuffer.length() < ACCESS_CODE_MAX_LEN) codeBuffer += k;
+        if (codeBuffer.length() < ACCESS_CODE_MAX_LEN) codeBuffer += k;
         Serial.print("CODE: ");
         Serial.println(codeBuffer);
       } else if (k == 'C') {
