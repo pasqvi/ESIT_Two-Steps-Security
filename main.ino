@@ -92,11 +92,12 @@ uint32_t countdownEndMs = 0;
 int lastCountdownShown = -1;
 
 bool backendCheckActive = false;
-uint32_t backendCheckStartMs = 0;
 
 // Shadow GET periodico
 uint32_t lastShadowGetMs = 0;
 const uint32_t SHADOW_GET_PERIOD_MS = 20000;
+
+const uint8_t ACCESS_CODE_MAX_LEN = 16;
 
 // -------------------- TEST TIMING --------------------
 bool authCandidatePending = false;
@@ -172,7 +173,6 @@ void startLockoutBanner() {
 
 void startBackendCheck() {
   backendCheckActive = true;
-  backendCheckStartMs = millis();
 }
 
 void stopBackendCheck() {
@@ -525,9 +525,12 @@ void sendIRCodeRequest(const String& code) {
   Serial.println(out);
 
   if (!client.publish(TOPIC_UPDATE, out, false, 0)) {
-    Serial.print("Publish error -> ");
-    lwMQTTErr(client.lastError());
-    Serial.println();
+  Serial.print("Publish error -> ");
+  lwMQTTErr(client.lastError());
+  Serial.println();
+
+  cancelPendingOperationState();
+  return;
   }
 }
 
@@ -699,7 +702,7 @@ void loop() {
       if (backendCheckActive || countdownActive) {
         Serial.println("Input ignored: operation already in progress.");
       } else if (k >= '0' && k <= '9') {
-        if (codeBuffer.length() < 8) codeBuffer += k;
+	if (codeBuffer.length() < ACCESS_CODE_MAX_LEN) codeBuffer += k;
         Serial.print("CODE: ");
         Serial.println(codeBuffer);
       } else if (k == 'C') {
