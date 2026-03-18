@@ -1,2 +1,2 @@
 # ESIT_Two-Steps-Security
-Repository di Backup
+Follow the steps in the PDF to run the project
